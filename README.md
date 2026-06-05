@@ -1,12 +1,50 @@
-# Task Tracker API
+# Task Tracker
 
-A production-style **FastAPI** backend for managing projects and their tasks.
-Built to demonstrate a clean, layered, async architecture that scales from a
-local demo to a cloud deployment on **Azure Cosmos DB**.
+A full-stack **task & project tracker** built to demonstrate a clean, layered,
+async architecture — a production-style **FastAPI** backend, a **React** SPA, and
+a natural-language chat assistant powered by a local LLM.
 
-> Runs out of the box with **no database and no cloud account** — it ships with
-> an in-memory backend so you can clone and explore in under a minute. Flip one
-> environment variable to switch to real Azure Cosmos DB.
+[![CI](https://github.com/nikredhil/fastapi-cosmos-api/actions/workflows/ci.yml/badge.svg)](https://github.com/nikredhil/fastapi-cosmos-api/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)
+![Tailwind](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)
+
+> Runs out of the box with **no database, no cloud account, and no API keys** —
+> it ships with an in-memory backend and a rule-based assistant, so you can clone
+> and explore in under a minute. Flip one env var for **Azure Cosmos DB**, and run
+> [Ollama](https://ollama.com) to upgrade the assistant to a local LLM.
+
+## Overview
+
+```mermaid
+flowchart LR
+    UI["React + Vite + Tailwind SPA<br/>sidebar · status board · chat panel"]
+    subgraph API["FastAPI backend"]
+        R["Routers<br/>/projects · /tasks · /chat"]
+        S["Services<br/>(business logic)"]
+        Repo["Repository interface"]
+        Chat["Chat assistant<br/>Ollama agent ↔ rule-based"]
+        R --> S --> Repo
+        R --> Chat
+        Chat -. "acts as the user" .-> R
+    end
+    Mem[("In-memory<br/>(default)")]
+    Cosmos[("Azure Cosmos DB")]
+    Ollama["Ollama<br/>(local LLM, optional)"]
+
+    UI -->|"HTTPS + JWT"| R
+    Repo --> Mem
+    Repo --> Cosmos
+    Chat -->|"tool calls"| Ollama
+```
+
+The **repository interface** is the seam that lets the same service code run
+against either storage backend. The **chat assistant** runs server-side: the LLM
+is given tools and the backend executes them against its own API as the
+signed-in user — so all auth and per-user isolation are enforced by the normal
+routes, and it cleanly falls back to a deterministic engine when no LLM is
+present.
 
 ## Highlights
 
