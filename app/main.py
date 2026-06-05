@@ -140,9 +140,12 @@ def create_app() -> FastAPI:
         "bills, contract parsing) on FastAPI + async repositories, JWT, structlog.",
         lifespan=lifespan,
     )
+    # CORS: "*" in dev, or a comma-separated allowlist in production.
+    raw = settings.cors_origins.strip()
+    origins = ["*"] if raw == "*" else [o.strip() for o in raw.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

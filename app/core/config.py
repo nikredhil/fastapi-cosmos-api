@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     environment: Literal["local", "dev", "prod"] = "local"
     log_level: str = "INFO"
 
+    # Allowed CORS origins. "*" (default) allows any origin — fine for local dev.
+    # In production set a comma-separated allowlist, e.g.
+    #   CORS_ORIGINS="https://wiserent.in,https://www.wiserent.in"
+    cors_origins: str = "*"
+
     # Storage backend selector. Defaults to "file" so tenant/rent data survives
     # restarts out of the box; switch to "cosmos" for a hosted deployment.
     db_backend: Literal["memory", "file", "cosmos"] = "file"
