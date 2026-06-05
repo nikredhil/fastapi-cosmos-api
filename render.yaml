@@ -19,10 +19,13 @@ services:
       #   (b) use Cosmos: set DB_BACKEND=cosmos and the COSMOS_* vars (sync:false).
       - key: DB_BACKEND
         value: file
+      # Writable path inside the project dir (works on the free plan, but is
+      # EPHEMERAL — resets on restart). With a persistent disk, change these to
+      # the disk's mountPath (e.g. /var/data and /var/data/uploads).
       - key: DATA_DIR
-        value: /var/data
+        value: ./data
       - key: UPLOADS_DIR
-        value: /var/data/uploads
+        value: ./data/uploads
       # Lock CORS to your domain (the Vite frontend's origin).
       - key: CORS_ORIGINS
         value: https://wiserent.in,https://www.wiserent.in
