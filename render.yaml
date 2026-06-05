@@ -11,6 +11,10 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      # Pin Python 3.12 — pydantic-core ships prebuilt wheels for it. (Render's
+      # default 3.14 has no wheel, so pip tries to compile it with Rust and fails.)
+      - key: PYTHON_VERSION
+        value: 3.12.8
       - key: ENVIRONMENT
         value: prod
       # Storage. The free plan has an EPHEMERAL filesystem — data resets on every
