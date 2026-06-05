@@ -154,14 +154,14 @@ def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[s
         return {"status": status, "tasks": matches}
 
     if name in ("list_tasks", "create_task"):
-        project = _resolve_project(client, args.get("project_name", ""))
-        if project is None:
+        target = _resolve_project(client, args.get("project_name", ""))
+        if target is None:
             return {"error": f"No project matching '{args.get('project_name', '')}'."}
 
         if name == "list_tasks":
-            tasks = client.list_tasks(project["id"], status=args.get("status"))
+            tasks = client.list_tasks(target["id"], status=args.get("status"))
             return {
-                "project": project["name"],
+                "project": target["name"],
                 "tasks": [
                     {
                         "title": t["title"],
@@ -174,13 +174,13 @@ def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[s
             }
 
         task = client.create_task(
-            project["id"],
+            target["id"],
             title=args["title"],
             status=args.get("status", "todo"),
             priority=args.get("priority", "medium"),
             assignee=args.get("assignee"),
         )
-        return {"created_task": task["title"], "in_project": project["name"]}
+        return {"created_task": task["title"], "in_project": target["name"]}
 
     return {"error": f"Unknown tool '{name}'."}
 

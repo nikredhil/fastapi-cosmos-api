@@ -45,7 +45,14 @@ class SupportsApi(Protocol):
     def list_projects(self) -> list[dict[str, Any]]: ...
     def create_project(self, name: str, description: str | None = ...) -> dict[str, Any]: ...
     def list_tasks(self, project_id: str, status: str | None = ...) -> list[dict[str, Any]]: ...
-    def create_task(self, project_id: str, title: str, **kwargs: Any) -> dict[str, Any]: ...
+    def create_task(
+        self,
+        project_id: str,
+        title: str,
+        status: str = ...,
+        priority: str = ...,
+        assignee: str | None = ...,
+    ) -> dict[str, Any]: ...
 
 
 def _find_status(text: str) -> str | None:
@@ -160,7 +167,7 @@ def handle(client: SupportsApi, message: str) -> str:
 
     # --- tasks by status across all projects: "what's blocked", "show done tasks" ---
     status = _find_status(lowered)
-    if status and ("task" in lowered or "what" in lowered or "show" in lowered or "list" in lowered):
+    if status and any(w in lowered for w in ("task", "what", "show", "list")):
         projects = client.list_projects()
         chunks = []
         total = 0

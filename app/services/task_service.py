@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.db.repositories.task_repository import TaskRepository
 from app.models.schemas.task import Task, TaskCreate, TaskUpdate
@@ -24,7 +24,7 @@ class TaskService:
 
     async def create(self, owner: str, project_id: str, payload: TaskCreate) -> Task:
         await self._assert_project(owner, project_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         document = {
             "id": str(uuid.uuid4()),
             "project_id": project_id,
@@ -67,7 +67,7 @@ class TaskService:
         for key, value in changes.items():
             # Enum fields serialize to their string value for storage.
             doc[key] = value.value if hasattr(value, "value") else value
-        doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+        doc["updated_at"] = datetime.now(UTC).isoformat()
         updated = await self._repo.update(doc)
         return Task(**updated)
 

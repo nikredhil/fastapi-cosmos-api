@@ -27,7 +27,7 @@ async def create_task(
     try:
         return await service.create(owner=user, project_id=project_id, payload=payload)
     except ProjectNotFoundError as exc:
-        raise _project_404(exc)
+        raise _project_404(exc) from exc
 
 
 @router.get("", response_model=Page[Task])
@@ -48,7 +48,7 @@ async def list_tasks(
             offset=offset,
         )
     except ProjectNotFoundError as exc:
-        raise _project_404(exc)
+        raise _project_404(exc) from exc
     return Page[Task](items=items, limit=limit, offset=offset, count=len(items))
 
 
@@ -62,9 +62,11 @@ async def get_task(
     try:
         return await service.get(owner=user, project_id=project_id, task_id=task_id)
     except ProjectNotFoundError as exc:
-        raise _project_404(exc)
-    except TaskNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise _project_404(exc) from exc
+    except TaskNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        ) from exc
 
 
 @router.patch("/{task_id}", response_model=Task)
@@ -80,9 +82,11 @@ async def update_task(
             owner=user, project_id=project_id, task_id=task_id, payload=payload
         )
     except ProjectNotFoundError as exc:
-        raise _project_404(exc)
-    except TaskNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise _project_404(exc) from exc
+    except TaskNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        ) from exc
 
 
 @router.delete(
@@ -97,7 +101,9 @@ async def delete_task(
     try:
         await service.delete(owner=user, project_id=project_id, task_id=task_id)
     except ProjectNotFoundError as exc:
-        raise _project_404(exc)
-    except TaskNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise _project_404(exc) from exc
+    except TaskNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

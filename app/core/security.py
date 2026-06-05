@@ -6,7 +6,7 @@ external identity provider (e.g. Azure AD) against its public keys.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,7 +19,7 @@ _bearer = HTTPBearer(auto_error=True)
 
 def create_access_token(subject: str, settings: Settings) -> str:
     """Mint a short-lived access token for the given subject (user id / name)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "iat": now,

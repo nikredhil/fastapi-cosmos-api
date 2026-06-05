@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.db.repositories.project_repository import ProjectRepository
 from app.models.schemas.project import Project, ProjectCreate, ProjectUpdate
@@ -17,7 +17,7 @@ class ProjectService:
         self._repo = repository
 
     async def create(self, owner: str, payload: ProjectCreate) -> Project:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         document = {
             "id": str(uuid.uuid4()),
             "owner": owner,
@@ -46,7 +46,7 @@ class ProjectService:
 
         changes = payload.model_dump(exclude_unset=True)
         doc.update(changes)
-        doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+        doc["updated_at"] = datetime.now(UTC).isoformat()
         updated = await self._repo.update(doc)
         return Project(**updated)
 

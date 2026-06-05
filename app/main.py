@@ -75,12 +75,14 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
-        description="Task/Project Tracker — FastAPI + async Cosmos DB repositories, JWT, structlog.",
+        description=(
+            "Task/Project Tracker — FastAPI + async Cosmos DB repositories, JWT, structlog."
+        ),
         lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )

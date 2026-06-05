@@ -40,8 +40,10 @@ async def get_project(
 ) -> Project:
     try:
         return await service.get(owner=user, project_id=project_id)
-    except ProjectNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        ) from exc
 
 
 @router.patch("/{project_id}", response_model=Project)
@@ -53,8 +55,10 @@ async def update_project(
 ) -> Project:
     try:
         return await service.update(owner=user, project_id=project_id, payload=payload)
-    except ProjectNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        ) from exc
 
 
 @router.delete(
@@ -67,6 +71,8 @@ async def delete_project(
 ) -> Response:
     try:
         await service.delete(owner=user, project_id=project_id)
-    except ProjectNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+        ) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

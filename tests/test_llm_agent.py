@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from tests.test_chat_engine import FakeClient
 from app.chat import assistant, llm_agent
-
+from tests.test_chat_engine import FakeClient
 
 # --- tool executor ---
 

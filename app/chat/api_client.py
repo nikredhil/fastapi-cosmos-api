@@ -25,8 +25,9 @@ class ApiClient:
     def login(self, username: str) -> str:
         resp = httpx.post(f"{self.base_url}/auth/token", json={"username": username}, timeout=10.0)
         resp.raise_for_status()
-        self._token = resp.json()["access_token"]
-        return self._token
+        token: str = resp.json()["access_token"]
+        self._token = token
+        return token
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         resp = httpx.request(
