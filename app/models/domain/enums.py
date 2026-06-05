@@ -1,32 +1,39 @@
-"""Domain enumerations."""
+"""Domain enumerations for the rental-management app."""
 from __future__ import annotations
 
 from enum import Enum
 
 
-class TaskStatus(str, Enum):
-    TODO = "todo"
-    IN_PROGRESS = "in_progress"
-    BLOCKED = "blocked"
-    DONE = "done"
+class UnitStatus(str, Enum):
+    """Occupancy state of a rentable unit/flat."""
+
+    VACANT = "vacant"
+    OCCUPIED = "occupied"
 
 
-class Priority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    URGENT = "urgent"
-
-
-class ItemType(str, Enum):
-    """Work-item type, mirroring Zoho Sprints' Story / Task / Bug."""
-
-    STORY = "story"
-    TASK = "task"
-    BUG = "bug"
-
-
-class SprintStatus(str, Enum):
-    PLANNED = "planned"
+class TenantStatus(str, Enum):
     ACTIVE = "active"
-    COMPLETED = "completed"
+    PAST = "past"
+
+
+class LeaseStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ENDED = "ended"
+
+
+class BillType(str, Enum):
+    """Kinds of charges a landlord tracks, tuned for the Indian market."""
+
+    RENT = "rent"
+    WATER = "water"
+    ELECTRICITY = "electricity"
+    MAINTENANCE = "maintenance"
+    OTHER = "other"
+
+
+class BillStatus(str, Enum):
+    UNPAID = "unpaid"
+    PARTIAL = "partial"
+    PAID = "paid"
+    OVERDUE = "overdue"

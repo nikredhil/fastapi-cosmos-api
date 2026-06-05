@@ -13,56 +13,41 @@ from app.chat import assistant, llm_agent
 
 # --- tool executor ---
 
-def test_execute_list_and_create_project() -> None:
+def test_execute_list_buildings() -> None:
     client = FakeClient()
-    assert llm_agent.execute_tool(client, "create_project", {"name": "Alpha"}) == {
-        "created": "Alpha"
-    }
-    result = llm_agent.execute_tool(client, "list_projects", {})
-    assert result == {"projects": [{"name": "Alpha"}]}
+    b = client.add_building("Lakeview", city="Pune")
+    client.add_unit(b["id"], "1", status="occupied")
+    client.add_unit(b["id"], "2", status="vacant")
+    result = llm_agent.execute_tool(client, "list_buildings", {})
+    assert result["buildings"][0]["name"] == "Lakeview"
+    assert result["buildings"][0]["units"] == 2
+    assert result["buildings"][0]["occupied"] == 1
 
 
-def test_execute_create_task_resolves_project() -> None:
+def test_execute_list_tenants_resolves_building() -> None:
     client = FakeClient()
-    client.create_project("Website")
-    result = llm_agent.execute_tool(
-        client,
-        "create_task",
-        {"project_name": "website", "title": "Build nav", "priority": "high"},
-    )
-    assert result == {"created_task": "Build nav", "in_project": "Website"}
-    assert next(iter(client.tasks.values()))["priority"] == "high"
+    b = client.add_building("Green Meadows")
+    client.add_tenant(b["id"], "Anjali")
+    result = llm_agent.execute_tool(client, "list_tenants", {"building_name": "green"})
+    assert result["building"] == "Green Meadows"
+    assert [t["name"] for t in result["tenants"]] == ["Anjali"]
 
 
-def test_execute_create_task_unknown_project() -> None:
-    client = FakeClient()
-    result = llm_agent.execute_tool(client, "create_task", {"project_name": "Ghost", "title": "x"})
+def test_execute_list_tenants_unknown_building() -> None:
+    result = llm_agent.execute_tool(FakeClient(), "list_tenants", {"building_name": "Ghost"})
     assert "error" in result
-    assert client.tasks == {}
 
 
-def test_execute_list_tasks_with_status() -> None:
+def test_execute_overdue_bills_across_buildings() -> None:
     client = FakeClient()
-    p = client.create_project("Alpha")
-    client.create_task(p["id"], title="A", status="blocked")
-    client.create_task(p["id"], title="B", status="todo")
-    result = llm_agent.execute_tool(
-        client, "list_tasks", {"project_name": "Alpha", "status": "blocked"}
-    )
-    assert [t["title"] for t in result["tasks"]] == ["A"]
-
-
-def test_execute_find_tasks_by_status_across_projects() -> None:
-    client = FakeClient()
-    a = client.create_project("Alpha")
-    b = client.create_project("Beta")
-    client.create_task(a["id"], title="A1", status="blocked")
-    client.create_task(b["id"], title="B1", status="blocked")
-    client.create_task(b["id"], title="B2", status="todo")
-    result = llm_agent.execute_tool(client, "find_tasks_by_status", {"status": "blocked"})
-    titles = sorted(t["title"] for t in result["tasks"])
-    assert titles == ["A1", "B1"]
-    assert {t["project"] for t in result["tasks"]} == {"Alpha", "Beta"}
+    a = client.add_building("A")
+    b = client.add_building("B")
+    client.add_bill(a["id"], status="overdue", tenant_name="X")
+    client.add_bill(b["id"], status="partial", tenant_name="Y")
+    client.add_bill(b["id"], status="paid", tenant_name="Z")
+    result = llm_agent.execute_tool(client, "overdue_bills", {})
+    names = sorted(item["tenant"] for item in result["outstanding"])
+    assert names == ["X", "Y"]
 
 
 def test_execute_unknown_tool() -> None:
@@ -75,13 +60,13 @@ def test_respond_forces_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(assistant, "CHAT_BACKEND", "rules")
     reply, backend = assistant.respond(FakeClient(), "help")
     assert backend == "rules"
-    assert "manage projects" in reply
+    assert "manage your rentals" in reply
 
 
 def test_auto_falls_back_when_ollama_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(assistant, "CHAT_BACKEND", "auto")
     monkeypatch.setattr(llm_agent, "is_available", lambda *a, **k: False)
-    reply, backend = assistant.respond(FakeClient(), "list my projects")
+    reply, backend = assistant.respond(FakeClient(), "list my buildings")
     assert backend == "rules"
 
 

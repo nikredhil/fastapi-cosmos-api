@@ -1,14 +1,36 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../api";
 
-const SUGGESTIONS = ["what's blocked?", "summary", "list my projects"];
+const SUGGESTIONS = ["who hasn't paid rent?", "this month's summary", "list my buildings"];
 
-export default function ChatPanel({ onDataChanged }) {
+// Flat robot mascot used as the assistant's avatar / launcher icon.
+function RobotIcon({ className = "" }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="Assistant">
+      {/* antenna */}
+      <circle cx="32" cy="8" r="5" fill="#b8bcc4" />
+      <rect x="30" y="11" width="4" height="13" rx="2" fill="#b8bcc4" />
+      {/* ears */}
+      <rect x="4" y="30" width="11" height="17" rx="5.5" fill="#d4d7dd" />
+      <rect x="49" y="30" width="11" height="17" rx="5.5" fill="#d4d7dd" />
+      {/* head */}
+      <rect x="12" y="22" width="40" height="33" rx="13" fill="#d4d7dd" />
+      {/* face screen */}
+      <rect x="18" y="28" width="28" height="21" rx="9" fill="#2c2c2e" />
+      {/* eyes */}
+      <circle cx="26" cy="38.5" r="3.6" fill="#5ce0d0" />
+      <circle cx="38" cy="38.5" r="3.6" fill="#5ce0d0" />
+    </svg>
+  );
+}
+
+export default function ChatPanel({ onAuthError }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hi! Ask me about your tasks, or tell me to create one. Try *what's blocked?*",
+      content:
+        "Hi! I'm your rental assistant. Ask about tenants, rent, or overdue bills. Try *who hasn't paid rent?*",
     },
   ]);
   const [input, setInput] = useState("");
@@ -32,8 +54,8 @@ export default function ChatPanel({ onDataChanged }) {
         ...m,
         { role: "assistant", content: res.reply, backend: res.backend },
       ]);
-      onDataChanged?.();
     } catch (err) {
+      if (String(err.message).startsWith("401")) onAuthError?.();
       setMessages((m) => [
         ...m,
         { role: "assistant", content: `Error: ${err.message}`, backend: "error" },
@@ -49,9 +71,9 @@ export default function ChatPanel({ onDataChanged }) {
       <button
         onClick={() => setOpen(true)}
         title="Open assistant"
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-2xl shadow-lg ring-1 ring-indigo-700/20 transition hover:scale-105 hover:bg-indigo-700"
+        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg ring-1 ring-blue-700/20 transition hover:scale-105 hover:bg-blue-700"
       >
-        💬
+        <RobotIcon className="h-9 w-9" />
       </button>
     );
   }
@@ -61,8 +83,10 @@ export default function ChatPanel({ onDataChanged }) {
     <div className="fixed bottom-5 right-5 z-40 flex h-[560px] max-h-[calc(100vh-2.5rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
         <div>
-          <h3 className="font-semibold text-slate-800">💬 Assistant</h3>
-          <p className="text-xs text-slate-500">Natural-language project & task control</p>
+          <h3 className="flex items-center gap-1.5 font-semibold text-slate-800">
+            <RobotIcon className="h-5 w-5" /> Rental Assistant
+          </h3>
+          <p className="text-xs text-slate-500">Ask about tenants, rent & bills</p>
         </div>
         <button
           onClick={() => setOpen(false)}
@@ -79,7 +103,7 @@ export default function ChatPanel({ onDataChanged }) {
             <div
               className={`inline-block max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
                 m.role === "user"
-                  ? "bg-indigo-600 text-white"
+                  ? "bg-blue-600 text-white"
                   : "bg-slate-100 text-slate-800"
               }`}
             >
@@ -118,11 +142,11 @@ export default function ChatPanel({ onDataChanged }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Message the assistant…"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
           />
           <button
             disabled={busy}
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
             Send
           </button>

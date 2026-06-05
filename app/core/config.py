@@ -10,15 +10,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "Task Tracker API"
+    app_name: str = "RentWise — Rental Manager"
     environment: Literal["local", "dev", "prod"] = "local"
     log_level: str = "INFO"
 
-    # Storage backend selector.
-    db_backend: Literal["memory", "file", "cosmos"] = "memory"
+    # Storage backend selector. Defaults to "file" so tenant/rent data survives
+    # restarts out of the box; switch to "cosmos" for a hosted deployment.
+    db_backend: Literal["memory", "file", "cosmos"] = "file"
 
     # Directory for the JSON-file backend (only used when db_backend == "file").
     data_dir: str = "./data"
+
+    # Where uploaded contract images are stored (served back via the contracts API).
+    uploads_dir: str = "./data/uploads"
+
+    # Anthropic (Claude) — used to parse uploaded contract photos into structured
+    # fields. When unset, the contract-parse endpoint degrades to manual entry.
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-opus-4-8"
 
     # Azure Cosmos DB (only required when db_backend == "cosmos").
     cosmos_endpoint: str | None = None

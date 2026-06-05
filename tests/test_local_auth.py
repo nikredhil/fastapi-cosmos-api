@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import Settings, get_settings
 from app.main import create_app
 
 
@@ -12,6 +13,7 @@ async def real_client():
     """Client with the REAL auth validator (no override), so locally minted
     HS256 tokens are validated end to end."""
     app = create_app()
+    app.dependency_overrides[get_settings] = lambda: Settings(db_backend="memory")
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
@@ -30,7 +32,7 @@ async def test_register_login_and_access(real_client: AsyncClient) -> None:
     token = body["access_token"]
 
     # The local token is accepted on a protected route.
-    me = await real_client.get("/projects", headers={"Authorization": f"Bearer {token}"})
+    me = await real_client.get("/buildings", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
 
     # Email is normalized → duplicate registration is rejected.
@@ -78,7 +80,7 @@ async def test_local_user_data_is_isolated(real_client: AsyncClient) -> None:
     ).json()["access_token"]
 
     await real_client.post(
-        "/projects", json={"name": "A's project"}, headers={"Authorization": f"Bearer {t1}"}
+        "/buildings", json={"name": "A's project"}, headers={"Authorization": f"Bearer {t1}"}
     )
-    listing = await real_client.get("/projects", headers={"Authorization": f"Bearer {t2}"})
+    listing = await real_client.get("/buildings", headers={"Authorization": f"Bearer {t2}"})
     assert listing.json()["count"] == 0

@@ -1,72 +1,52 @@
-"""Seed the API with sample projects, members, sprints, and work items.
+"""Seed the API with sample buildings, units, tenants, leases, and bills.
 
-The API now authenticates with Microsoft (Entra ID), so seeding needs a real
-bearer token. Sign in to the web app, copy the ID token your browser sends in
-the Authorization header (DevTools → Network → any /projects request), then:
+The API authenticates with a bearer token. The easiest path locally is a local
+account: register/sign in on the web app, copy the bearer token from any API
+request (DevTools → Network → Authorization header), then:
 
-    API_TOKEN="<id-token>" python scripts/seed_data.py
-    API_BASE=http://localhost:8055 API_TOKEN="<id-token>" python scripts/seed_data.py
+    API_TOKEN="<token>" python -m scripts.seed_data
+    API_BASE=http://localhost:8000 API_TOKEN="<token>" python -m scripts.seed_data
 """
 from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timezone
 
 import httpx
 
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 API_TOKEN = os.getenv("API_TOKEN")
 
-# Per project: a roster of members, a couple of sprints, and work items.
-# A work item is (title, item_type, status, priority, points, assignee, sprint, tags).
+PERIOD = datetime.now(timezone.utc).strftime("%Y-%m")
+
+# Per building: units (label, floor, bedrooms, rent) and tenants
+# (name, phone, unit-index, deposit). Tenants are placed into units by index.
 SAMPLE = {
-    "Website Redesign": {
-        "members": [
-            ("Alice Chen", "Product Designer", "#6366f1"),
-            ("Bob Singh", "Frontend Engineer", "#0ea5e9"),
-            ("Carol Diaz", "Accessibility Lead", "#10b981"),
+    "Lakeview Apartments": {
+        "city": "Bengaluru",
+        "address": "12 Lakeview Rd, Indiranagar",
+        "units": [
+            ("A-101", 1, 2, 24000),
+            ("A-102", 1, 1, 16000),
+            ("B-201", 2, 3, 32000),
         ],
-        "sprints": [
-            ("Sprint 1 — Foundations", "active", "2026-06-01", "2026-06-14"),
-            ("Sprint 2 — Polish", "planned", "2026-06-15", "2026-06-28"),
-        ],
-        "items": [
-            ("Audit current site analytics", "task", "done", "medium", 3, "Alice Chen", 0, ["analytics"]),
-            ("Wireframe new homepage", "story", "in_progress", "high", 8, "Alice Chen", 0, ["design"]),
-            ("Design system + component library", "story", "in_progress", "high", 13, "Bob Singh", 0, ["design", "frontend"]),
-            ("Migrate blog content", "task", "todo", "low", 5, None, 1, ["content"]),
-            ("Accessibility (WCAG AA) pass", "task", "todo", "high", 8, "Carol Diaz", 1, ["a11y"]),
-            ("Nav dropdown flickers on hover", "bug", "blocked", "urgent", 2, "Bob Singh", 0, ["frontend"]),
+        "tenants": [
+            ("Rohit Sharma", "+91 98450 11223", 0, 48000),
+            ("Priya Nair", "+91 99860 44556", 1, 32000),
+            ("Imran Khan", "+91 97400 77889", 2, 64000),
         ],
     },
-    "Mobile App v2": {
-        "members": [
-            ("Alice Chen", "Tech Lead", "#6366f1"),
-            ("Bob Singh", "Mobile Engineer", "#0ea5e9"),
-            ("Carol Diaz", "QA", "#10b981"),
+    "Green Meadows": {
+        "city": "Pune",
+        "address": "45 MG Road, Kothrud",
+        "units": [
+            ("101", 1, 2, 18000),
+            ("102", 1, 2, 18500),
         ],
-        "sprints": [
-            ("Sprint A — Core", "active", "2026-06-02", "2026-06-16"),
-        ],
-        "items": [
-            ("Set up CI/CD pipeline", "task", "done", "high", 5, "Bob Singh", 0, ["devops"]),
-            ("Offline mode sync engine", "story", "blocked", "urgent", 13, "Alice Chen", 0, ["sync"]),
-            ("Push notifications", "story", "todo", "medium", 8, "Carol Diaz", 0, ["notifications"]),
-            ("App Store screenshots", "task", "todo", "low", 2, None, None, ["release"]),
-        ],
-    },
-    "Q3 Marketing Campaign": {
-        "members": [
-            ("Carol Diaz", "Campaign Manager", "#10b981"),
-            ("Alice Chen", "Copywriter", "#6366f1"),
-        ],
-        "sprints": [
-            ("Launch Sprint", "active", "2026-06-03", "2026-06-17"),
-        ],
-        "items": [
-            ("Define target segments", "task", "done", "medium", 3, "Carol Diaz", 0, ["research"]),
-            ("Draft email sequence", "story", "in_progress", "medium", 5, "Alice Chen", 0, ["email"]),
-            ("Landing page A/B test", "story", "todo", "high", 8, None, 0, ["web"]),
+        "tenants": [
+            ("Anjali Verma", "+91 90210 33445", 0, 36000),
+            ("Karthik Rao", "+91 99000 22113", 1, 37000),
         ],
     },
 }
@@ -76,66 +56,86 @@ def main() -> None:
     if not API_TOKEN:
         sys.exit(
             "API_TOKEN is required. Sign in to the web app, copy the bearer token from a "
-            "/projects request (DevTools → Network), and re-run with API_TOKEN=<token>."
+            "/buildings request (DevTools → Network), and re-run with API_TOKEN=<token>."
         )
-    with httpx.Client(base_url=API_BASE, timeout=10.0) as client:
+    with httpx.Client(base_url=API_BASE, timeout=15.0) as client:
         headers = {"Authorization": f"Bearer {API_TOKEN}"}
+        n_b = n_u = n_t = n_l = n_bills = 0
 
-        n_projects = n_members = n_sprints = n_items = 0
-        for project_name, spec in SAMPLE.items():
-            pid = client.post(
-                "/projects", json={"name": project_name}, headers=headers
+        for name, spec in SAMPLE.items():
+            bid = client.post(
+                "/buildings",
+                json={"name": name, "city": spec["city"], "address": spec["address"]},
+                headers=headers,
             ).json()["id"]
-            n_projects += 1
+            n_b += 1
 
-            # Members → name -> id lookup.
-            member_ids: dict[str, str] = {}
-            for name, role, color in spec["members"]:
-                member = client.post(
-                    f"/projects/{pid}/members",
-                    json={"name": name, "role": role, "avatar_color": color},
+            unit_ids: list[str] = []
+            for label, floor, beds, rent in spec["units"]:
+                uid = client.post(
+                    f"/buildings/{bid}/units",
+                    json={"label": label, "floor": floor, "bedrooms": beds, "default_rent": rent},
                     headers=headers,
-                ).json()
-                member_ids[name] = member["id"]
-                n_members += 1
+                ).json()["id"]
+                unit_ids.append(uid)
+                n_u += 1
 
-            # Sprints → list of ids (referenced by index in items).
-            sprint_ids: list[str] = []
-            for name, sprint_status, start, end in spec["sprints"]:
-                sprint = client.post(
-                    f"/projects/{pid}/sprints",
-                    json={"name": name, "start_date": start, "end_date": end},
-                    headers=headers,
-                ).json()
-                if sprint_status != "planned":
-                    client.patch(
-                        f"/projects/{pid}/sprints/{sprint['id']}",
-                        json={"status": sprint_status},
-                        headers=headers,
-                    )
-                sprint_ids.append(sprint["id"])
-                n_sprints += 1
-
-            for title, item_type, status, priority, points, assignee, sprint_idx, tags in spec["items"]:
-                client.post(
-                    f"/projects/{pid}/tasks",
+            for tenant_name, phone, unit_idx, deposit in spec["tenants"]:
+                uid = unit_ids[unit_idx]
+                tenant = client.post(
+                    f"/buildings/{bid}/tenants",
                     json={
-                        "title": title,
-                        "item_type": item_type,
-                        "status": status,
-                        "priority": priority,
-                        "points": points,
-                        "assignee_id": member_ids.get(assignee) if assignee else None,
-                        "sprint_id": sprint_ids[sprint_idx] if sprint_idx is not None else None,
-                        "tags": tags,
+                        "name": tenant_name,
+                        "phone": phone,
+                        "unit_id": uid,
+                        "deposit": deposit,
+                        "move_in_date": "2026-01-01",
+                    },
+                    headers=headers,
+                ).json()
+                n_t += 1
+                rent = spec["units"][unit_idx][3]
+                client.post(
+                    f"/buildings/{bid}/leases",
+                    json={
+                        "unit_id": uid,
+                        "tenant_id": tenant["id"],
+                        "monthly_rent": rent,
+                        "deposit": deposit,
+                        "rent_due_day": 5,
+                        "start_date": "2026-01-01",
                     },
                     headers=headers,
                 )
-                n_items += 1
+                n_l += 1
+
+            # Generate this month's rent + utilities, then mark a few as paid.
+            generated = client.post(
+                f"/buildings/{bid}/bills/generate",
+                json={
+                    "period": PERIOD,
+                    "include_water": True,
+                    "include_electricity": True,
+                    "water_amount": 600,
+                    "electricity_amount": 1800,
+                },
+                headers=headers,
+            ).json()["items"]
+            n_bills += len(generated)
+
+            # Pay the first generated rent bill fully, leave others outstanding.
+            for bill in generated:
+                if bill["bill_type"] == "rent":
+                    client.post(
+                        f"/buildings/{bid}/bills/{bill['id']}/payments",
+                        json={"amount": bill["amount"], "method": "upi"},
+                        headers=headers,
+                    )
+                    break
 
         print(
-            f"Seeded {n_projects} projects, {n_members} members, {n_sprints} sprints, "
-            f"and {n_items} work items at {API_BASE}"
+            f"Seeded {n_b} buildings, {n_u} units, {n_t} tenants, {n_l} leases, "
+            f"and {n_bills} bills for {PERIOD} at {API_BASE}"
         )
 
 

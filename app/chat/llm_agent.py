@@ -1,8 +1,8 @@
-"""Ollama-backed tool-calling assistant.
+"""Ollama-backed tool-calling assistant for the rental manager.
 
-The LLM is given a set of tools (list/create projects and tasks). It decides
-which to call; this module executes the calls against the Task Tracker API,
-feeds the results back, and loops until the model produces a final answer.
+The LLM is given a set of read tools (buildings, tenants, bills, summary). It
+decides which to call; this module executes the calls against the API, feeds the
+results back, and loops until the model produces a final answer.
 
 Uses Ollama's HTTP API directly (no extra dependency). Works with any
 tool-capable model — set OLLAMA_MODEL (e.g. "llama3.2", "gpt-oss:120b-cloud").
@@ -15,179 +15,172 @@ from typing import Any
 
 import httpx
 
-from app.chat.chat_engine import SupportsApi, _assignee_of, _resolve_project
+from app.chat.chat_engine import SupportsApi, _resolve_building
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:120b-cloud")
 MAX_STEPS = 6
 
 SYSTEM_PROMPT = (
-    "You are an assistant for a task-tracking app. The signed-in user owns a set of "
-    "projects, each containing tasks.\n"
-    "ALWAYS use the tools to answer questions about the user's projects or tasks — "
-    "never answer from general knowledge, and never invent project names, task "
-    "titles, ids, statuses, or counts. If a question is about what is blocked / in "
-    "progress / done across everything, call find_tasks_by_status.\n"
-    "When the user asks to create something and has given the required details "
-    "(a project name, and a title for a task), create it immediately with the tools. "
-    "Do NOT ask for optional fields such as assignee or description — leave them "
-    "empty if the user didn't mention them.\n"
-    "Task status is one of: todo, in_progress, blocked, done. Priority is one of: "
-    "low, medium, high, urgent. Keep replies concise and friendly."
+    "You are an assistant for a landlord's rental-management app. The signed-in user owns "
+    "buildings; each building has units (flats), tenants, and monthly bills (rent, water, "
+    "electricity, maintenance). All amounts are in Indian rupees (₹).\n"
+    "ALWAYS use the tools to answer questions about the user's buildings, tenants, or bills — "
+    "never answer from general knowledge, and never invent names, amounts, or counts. For "
+    "questions about who owes money or what's late, call overdue_bills. For portfolio-wide "
+    "numbers (occupancy, collected vs outstanding), call monthly_summary. To answer 'who is "
+    "<name>?' call list_tenants for the relevant building(s) and summarise that tenant's unit, "
+    "rent status, and contact.\n"
+    "NEVER show internal IDs or UUIDs to the user — refer to units by their label (e.g. 'A-101') "
+    "and buildings by name. If a value looks like a long random string, omit it.\n"
+    "Bill status is one of: unpaid, partial, paid, overdue. Keep replies concise and friendly, "
+    "and format money with the ₹ symbol."
 )
 
 TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "list_projects",
-            "description": "List all of the user's projects.",
+            "name": "list_buildings",
+            "description": "List all of the landlord's buildings with unit counts.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "list_tasks",
-            "description": "List tasks in a project, optionally filtered by status.",
+            "name": "list_tenants",
+            "description": "List the tenants in a specific building.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "project_name": {"type": "string"},
-                    "status": {
-                        "type": "string",
-                        "enum": ["todo", "in_progress", "blocked", "done"],
-                    },
-                },
-                "required": ["project_name"],
+                "properties": {"building_name": {"type": "string"}},
+                "required": ["building_name"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "find_tasks_by_status",
+            "name": "overdue_bills",
             "description": (
-                "Find all tasks across every project that have the given status. "
-                "Use this for questions like 'what's blocked?' or 'what's in progress?'."
+                "List every outstanding (unpaid/partial/overdue) bill across all buildings. "
+                "Use for 'who hasn't paid rent?' or 'what's overdue?'."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["todo", "in_progress", "blocked", "done"],
-                    },
+                    "period": {"type": "string", "description": "Optional month, e.g. 2026-06"}
                 },
-                "required": ["status"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "create_project",
-            "description": "Create a new project.",
+            "name": "monthly_summary",
+            "description": (
+                "Portfolio KPIs for a month: occupancy, expected vs collected vs outstanding, "
+                "and overdue count."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
-                    "description": {"type": "string"},
+                    "period": {"type": "string", "description": "Optional month, e.g. 2026-06"}
                 },
-                "required": ["name"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "create_task",
-            "description": "Create a task inside an existing project.",
+            "name": "list_bills",
+            "description": "List bills in a building, optionally filtered by month and/or status.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "project_name": {"type": "string"},
-                    "title": {"type": "string"},
+                    "building_name": {"type": "string"},
+                    "period": {"type": "string", "description": "Month, e.g. 2026-06"},
                     "status": {
                         "type": "string",
-                        "enum": ["todo", "in_progress", "blocked", "done"],
+                        "enum": ["unpaid", "partial", "paid", "overdue"],
                     },
-                    "priority": {
-                        "type": "string",
-                        "enum": ["low", "medium", "high", "urgent"],
-                    },
-                    "item_type": {
-                        "type": "string",
-                        "enum": ["story", "task", "bug"],
-                    },
-                    "points": {"type": "integer", "description": "Story points (0-100)"},
                 },
-                "required": ["project_name", "title"],
+                "required": ["building_name"],
             },
         },
     },
 ]
 
 
+def _bill_brief(bill: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "tenant": bill.get("tenant_name"),
+        "unit": bill.get("unit_label"),
+        "type": bill.get("bill_type"),
+        "period": bill.get("period"),
+        "amount": bill.get("amount"),
+        "paid": bill.get("paid_amount"),
+        "status": bill.get("status"),
+    }
+
+
 def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Run one tool call against the API. Returns a JSON-serializable result.
+    """Run one tool call against the API. Returns a JSON-serializable result."""
+    if name == "list_buildings":
+        out = []
+        for b in client.list_buildings():
+            units = client.list_units(b["id"])
+            out.append(
+                {
+                    "name": b["name"],
+                    "city": b.get("city"),
+                    "units": len(units),
+                    "occupied": sum(1 for u in units if u.get("status") == "occupied"),
+                }
+            )
+        return {"buildings": out}
 
-    Pure dispatch with no model dependency, so it is unit-testable directly.
-    """
-    if name == "list_projects":
-        projects = client.list_projects()
-        return {"projects": [{"name": p["name"]} for p in projects]}
+    if name == "monthly_summary":
+        return client.dashboard(period=args.get("period"))
 
-    if name == "create_project":
-        project = client.create_project(args["name"], args.get("description"))
-        return {"created": project["name"]}
-
-    if name == "find_tasks_by_status":
-        status = args.get("status")
+    if name == "overdue_bills":
+        period = args.get("period")
         matches = []
-        for project in client.list_projects():
-            for task in client.list_tasks(project["id"], status=status):
-                matches.append(
-                    {
-                        "project": project["name"],
-                        "title": task["title"],
-                        "priority": task["priority"],
-                        "points": task.get("points"),
-                        "assignee": _assignee_of(task),
-                    }
-                )
-        return {"status": status, "tasks": matches}
+        for b in client.list_buildings():
+            for bill in client.list_bills(b["id"], period=period):
+                if bill.get("status") in ("unpaid", "partial", "overdue"):
+                    matches.append({**_bill_brief(bill), "building": b["name"]})
+        return {"outstanding": matches}
 
-    if name in ("list_tasks", "create_task"):
-        project = _resolve_project(client, args.get("project_name", ""))
-        if project is None:
-            return {"error": f"No project matching '{args.get('project_name', '')}'."}
+    if name == "list_tenants":
+        building = _resolve_building(client, args.get("building_name", ""))
+        if building is None:
+            return {"error": f"No building matching '{args.get('building_name', '')}'."}
+        units = {u["id"]: u.get("label") for u in client.list_units(building["id"])}
+        tenants = client.list_tenants(building["id"])
+        return {
+            "building": building["name"],
+            "tenants": [
+                {
+                    "name": t["name"],
+                    "phone": t.get("phone"),
+                    "email": t.get("email"),
+                    "unit": units.get(t.get("unit_id")),
+                    "deposit": t.get("deposit"),
+                    "status": t.get("status"),
+                }
+                for t in tenants
+            ],
+        }
 
-        if name == "list_tasks":
-            tasks = client.list_tasks(project["id"], status=args.get("status"))
-            return {
-                "project": project["name"],
-                "tasks": [
-                    {
-                        "title": t["title"],
-                        "status": t["status"],
-                        "priority": t["priority"],
-                        "points": t.get("points"),
-                        "assignee": _assignee_of(t),
-                    }
-                    for t in tasks
-                ],
-            }
-
-        task = client.create_task(
-            project["id"],
-            title=args["title"],
-            status=args.get("status", "todo"),
-            priority=args.get("priority", "medium"),
-            item_type=args.get("item_type", "task"),
-            points=args.get("points"),
+    if name == "list_bills":
+        building = _resolve_building(client, args.get("building_name", ""))
+        if building is None:
+            return {"error": f"No building matching '{args.get('building_name', '')}'."}
+        bills = client.list_bills(
+            building["id"], period=args.get("period"), status=args.get("status")
         )
-        return {"created_task": task["title"], "in_project": project["name"]}
+        return {"building": building["name"], "bills": [_bill_brief(b) for b in bills]}
 
     return {"error": f"Unknown tool '{name}'."}
 

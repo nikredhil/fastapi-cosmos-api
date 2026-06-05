@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from app.services.member_service import MemberService
-from app.services.project_service import ProjectService
-from app.services.sprint_service import SprintService
-from app.services.task_service import TaskService
+from app.services.bill_service import BillService
+from app.services.building_service import BuildingService
+from app.services.dashboard_service import DashboardService
+from app.services.lease_service import LeaseService
+from app.services.tenant_service import TenantService
+from app.services.unit_service import UnitService
 from app.services.user_service import UserService
 
 
@@ -18,17 +20,25 @@ def get_user_service(request: Request) -> UserService:
     return request.app.state.user_service
 
 
-def get_project_service(request: Request) -> ProjectService:
-    return request.app.state.project_service
+def get_building_service(request: Request) -> BuildingService:
+    return request.app.state.building_service
 
 
-def get_task_service(request: Request) -> TaskService:
-    return request.app.state.task_service
+def get_unit_service(request: Request) -> UnitService:
+    return request.app.state.unit_service
 
 
-def get_member_service(request: Request) -> MemberService:
-    return request.app.state.member_service
+def get_tenant_service(request: Request) -> TenantService:
+    return request.app.state.tenant_service
 
 
-def get_sprint_service(request: Request) -> SprintService:
-    return request.app.state.sprint_service
+def get_lease_service(request: Request) -> LeaseService:
+    return request.app.state.lease_service
+
+
+def get_bill_service(request: Request) -> BillService:
+    return request.app.state.bill_service
+
+
+def get_dashboard_service(request: Request) -> DashboardService:
+    return request.app.state.dashboard_service

@@ -1,54 +1,66 @@
 """Application entry point: lifespan wiring, middleware, router registration."""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import os
-
-from app.api.routers import auth, chat, health, members, projects, sprints, tasks
+from app.api.routers import (
+    auth,
+    bills,
+    buildings,
+    chat,
+    contracts,
+    dashboard,
+    health,
+    leases,
+    tenants,
+    units,
+)
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.repositories import (
-    member_repository,
-    project_repository,
-    sprint_repository,
-    task_repository,
+    bill_repository,
+    building_repository,
+    lease_repository,
+    tenant_repository,
+    unit_repository,
     user_repository,
 )
 from app.db.repositories.base import BaseRepository
+from app.db.repositories.bill_repository import BillRepository
+from app.db.repositories.building_repository import BuildingRepository
 from app.db.repositories.file_store import JsonFileRepository
-from app.db.repositories.member_repository import MemberRepository
+from app.db.repositories.lease_repository import LeaseRepository
 from app.db.repositories.memory import InMemoryRepository
-from app.db.repositories.project_repository import ProjectRepository
-from app.db.repositories.sprint_repository import SprintRepository
-from app.db.repositories.task_repository import TaskRepository
+from app.db.repositories.tenant_repository import TenantRepository
+from app.db.repositories.unit_repository import UnitRepository
 from app.db.repositories.user_repository import UserRepository
-from app.services.member_service import MemberService
-from app.services.project_service import ProjectService
-from app.services.sprint_service import SprintService
-from app.services.task_service import TaskService
+from app.services.bill_service import BillService
+from app.services.building_service import BuildingService
+from app.services.dashboard_service import DashboardService
+from app.services.lease_service import LeaseService
+from app.services.tenant_service import TenantService
+from app.services.unit_service import UnitService
 from app.services.user_service import UserService
 
 logger = get_logger(__name__)
 
 # (container module, partition-key field) for every document type we persist.
 _CONTAINERS = (
-    (project_repository.CONTAINER_NAME, project_repository.PARTITION_KEY_FIELD),
-    (task_repository.CONTAINER_NAME, task_repository.PARTITION_KEY_FIELD),
-    (member_repository.CONTAINER_NAME, member_repository.PARTITION_KEY_FIELD),
-    (sprint_repository.CONTAINER_NAME, sprint_repository.PARTITION_KEY_FIELD),
+    (building_repository.CONTAINER_NAME, building_repository.PARTITION_KEY_FIELD),
+    (unit_repository.CONTAINER_NAME, unit_repository.PARTITION_KEY_FIELD),
+    (tenant_repository.CONTAINER_NAME, tenant_repository.PARTITION_KEY_FIELD),
+    (lease_repository.CONTAINER_NAME, lease_repository.PARTITION_KEY_FIELD),
+    (bill_repository.CONTAINER_NAME, bill_repository.PARTITION_KEY_FIELD),
     (user_repository.CONTAINER_NAME, user_repository.PARTITION_KEY_FIELD),
 )
 
 
 async def _build_backends(app: FastAPI) -> dict[str, BaseRepository]:
-    """Construct one storage backend per document type, based on settings.
-
-    Returns a dict keyed by container name (projects/tasks/members/sprints).
-    """
+    """Construct one storage backend per document type, based on settings."""
     settings = get_settings()
 
     if settings.db_backend == "cosmos":
@@ -83,17 +95,32 @@ async def lifespan(app: FastAPI):
 
     backends = await _build_backends(app)
 
-    project_service = ProjectService(ProjectRepository(backends["projects"]))
-    member_service = MemberService(MemberRepository(backends["members"]), project_service)
-    sprint_service = SprintService(SprintRepository(backends["sprints"]), project_service)
-    task_service = TaskService(
-        TaskRepository(backends["tasks"]), project_service, member_service
+    building_service = BuildingService(BuildingRepository(backends["buildings"]))
+    unit_service = UnitService(UnitRepository(backends["units"]), building_service)
+    tenant_service = TenantService(
+        TenantRepository(backends["tenants"]), building_service, unit_service
+    )
+    lease_service = LeaseService(
+        LeaseRepository(backends["leases"]), building_service, unit_service
+    )
+    bill_service = BillService(
+        BillRepository(backends["bills"]),
+        building_service,
+        lease_service,
+        tenant_service,
+        unit_service,
+    )
+    dashboard_service = DashboardService(
+        building_service, unit_service, tenant_service, bill_service
     )
     user_service = UserService(UserRepository(backends["users"]))
-    app.state.project_service = project_service
-    app.state.member_service = member_service
-    app.state.sprint_service = sprint_service
-    app.state.task_service = task_service
+
+    app.state.building_service = building_service
+    app.state.unit_service = unit_service
+    app.state.tenant_service = tenant_service
+    app.state.lease_service = lease_service
+    app.state.bill_service = bill_service
+    app.state.dashboard_service = dashboard_service
     app.state.user_service = user_service
 
     yield
@@ -108,8 +135,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
-        description="Task/Project Tracker — FastAPI + async Cosmos DB repositories, JWT, structlog.",
+        version="0.2.0",
+        description="RentWise — landlord rental management (buildings, tenants, rent & utility "
+        "bills, contract parsing) on FastAPI + async repositories, JWT, structlog.",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -121,10 +149,13 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
-    app.include_router(projects.router)
-    app.include_router(tasks.router)
-    app.include_router(members.router)
-    app.include_router(sprints.router)
+    app.include_router(dashboard.router)
+    app.include_router(buildings.router)
+    app.include_router(units.router)
+    app.include_router(tenants.router)
+    app.include_router(leases.router)
+    app.include_router(bills.router)
+    app.include_router(contracts.router)
     app.include_router(chat.router)
     return app
 

@@ -7,6 +7,8 @@ python-jose[cryptography]==3.3.0
 bcrypt==5.0.0
 structlog==24.4.0
 python-dotenv==1.0.1
+python-multipart==0.0.20
+anthropic==0.69.0
 
 # dev / test
 pytest==8.3.4

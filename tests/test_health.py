@@ -16,7 +16,9 @@ async def raw_client():
     exercise actual token validation.
     """
     app = create_app()
-    app.dependency_overrides[get_settings] = lambda: Settings(azure_client_id="test-client-id")
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        azure_client_id="test-client-id", db_backend="memory"
+    )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         async with app.router.lifespan_context(app):
@@ -33,12 +35,12 @@ async def test_health(client: AsyncClient) -> None:
 
 
 async def test_protected_route_requires_auth(client: AsyncClient) -> None:
-    resp = await client.get("/projects")
+    resp = await client.get("/buildings")
     assert resp.status_code == 403  # no bearer credentials supplied
 
 
 async def test_token_then_access(client: AsyncClient, auth_headers: dict[str, str]) -> None:
-    resp = await client.get("/projects", headers=auth_headers)
+    resp = await client.get("/buildings", headers=auth_headers)
     assert resp.status_code == 200
 
 
@@ -52,5 +54,5 @@ async def test_auth_config_exposes_client_id(raw_client: AsyncClient) -> None:
 
 async def test_garbage_token_rejected(raw_client: AsyncClient) -> None:
     # A malformed bearer is rejected by the real validator without any network call.
-    resp = await raw_client.get("/projects", headers={"Authorization": "Bearer not.a.jwt"})
+    resp = await raw_client.get("/buildings", headers={"Authorization": "Bearer not.a.jwt"})
     assert resp.status_code == 401

@@ -18,6 +18,28 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
   return res.json();
 }
 
+// multipart upload (no Content-Type so the browser sets the boundary)
+async function upload(path, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await getToken()}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+const qs = (params) => {
+  const q = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") q.set(k, v);
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+};
+
 export const api = {
   // --- local accounts (unauthenticated) ---
   register: (email, password, displayName) =>
@@ -29,89 +51,121 @@ export const api = {
   loginLocal: (email, password) =>
     request("/auth/login", { method: "POST", auth: false, body: { email, password } }),
 
-  // --- projects ---
-  listProjects: () => request("/projects").then((d) => d.items),
-  createProject: (name, description) =>
-    request("/projects", { method: "POST", body: { name, description } }),
-  deleteProject: (id) => request(`/projects/${id}`, { method: "DELETE" }),
+  // --- dashboard ---
+  dashboard: (period) => request(`/dashboard${qs({ period })}`),
 
-  // --- members ---
-  listMembers: (projectId) => request(`/projects/${projectId}/members`).then((d) => d.items),
-  createMember: (projectId, member) =>
-    request(`/projects/${projectId}/members`, { method: "POST", body: member }),
-  updateMember: (projectId, memberId, patch) =>
-    request(`/projects/${projectId}/members/${memberId}`, { method: "PATCH", body: patch }),
-  deleteMember: (projectId, memberId) =>
-    request(`/projects/${projectId}/members/${memberId}`, { method: "DELETE" }),
+  // --- buildings ---
+  listBuildings: () => request("/buildings").then((d) => d.items),
+  getBuilding: (id) => request(`/buildings/${id}`),
+  createBuilding: (body) => request("/buildings", { method: "POST", body }),
+  updateBuilding: (id, patch) => request(`/buildings/${id}`, { method: "PATCH", body: patch }),
+  deleteBuilding: (id) => request(`/buildings/${id}`, { method: "DELETE" }),
 
-  // --- sprints ---
-  listSprints: (projectId) => request(`/projects/${projectId}/sprints`).then((d) => d.items),
-  createSprint: (projectId, sprint) =>
-    request(`/projects/${projectId}/sprints`, { method: "POST", body: sprint }),
-  updateSprint: (projectId, sprintId, patch) =>
-    request(`/projects/${projectId}/sprints/${sprintId}`, { method: "PATCH", body: patch }),
-  deleteSprint: (projectId, sprintId) =>
-    request(`/projects/${projectId}/sprints/${sprintId}`, { method: "DELETE" }),
+  // --- units ---
+  listUnits: (bid) => request(`/buildings/${bid}/units`).then((d) => d.items),
+  createUnit: (bid, body) => request(`/buildings/${bid}/units`, { method: "POST", body }),
+  updateUnit: (bid, id, patch) =>
+    request(`/buildings/${bid}/units/${id}`, { method: "PATCH", body: patch }),
+  deleteUnit: (bid, id) => request(`/buildings/${bid}/units/${id}`, { method: "DELETE" }),
 
-  // --- tasks ---
-  listTasks: (projectId, { status, sprintId, assigneeId } = {}) => {
-    const q = new URLSearchParams();
-    if (status) q.set("status", status);
-    if (sprintId) q.set("sprint_id", sprintId);
-    if (assigneeId) q.set("assignee_id", assigneeId);
-    const qs = q.toString();
-    return request(`/projects/${projectId}/tasks${qs ? `?${qs}` : ""}`).then((d) => d.items);
-  },
-  createTask: (projectId, task) =>
-    request(`/projects/${projectId}/tasks`, { method: "POST", body: task }),
-  updateTask: (projectId, taskId, patch) =>
-    request(`/projects/${projectId}/tasks/${taskId}`, { method: "PATCH", body: patch }),
-  addComment: (projectId, taskId, body) =>
-    request(`/projects/${projectId}/tasks/${taskId}/comments`, {
-      method: "POST",
-      body: { body },
-    }),
-  deleteTask: (projectId, taskId) =>
-    request(`/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" }),
+  // --- tenants ---
+  listTenants: (bid) => request(`/buildings/${bid}/tenants`).then((d) => d.items),
+  getTenant: (bid, id) => request(`/buildings/${bid}/tenants/${id}`),
+  createTenant: (bid, body) => request(`/buildings/${bid}/tenants`, { method: "POST", body }),
+  updateTenant: (bid, id, patch) =>
+    request(`/buildings/${bid}/tenants/${id}`, { method: "PATCH", body: patch }),
+  deleteTenant: (bid, id) => request(`/buildings/${bid}/tenants/${id}`, { method: "DELETE" }),
 
-  chat: (message, history) =>
-    request("/chat", { method: "POST", body: { message, history } }),
+  // --- leases ---
+  listLeases: (bid) => request(`/buildings/${bid}/leases`).then((d) => d.items),
+  createLease: (bid, body) => request(`/buildings/${bid}/leases`, { method: "POST", body }),
+  updateLease: (bid, id, patch) =>
+    request(`/buildings/${bid}/leases/${id}`, { method: "PATCH", body: patch }),
+  deleteLease: (bid, id) => request(`/buildings/${bid}/leases/${id}`, { method: "DELETE" }),
+
+  // --- bills ---
+  listBills: (bid, filters) =>
+    request(`/buildings/${bid}/bills${qs(filters)}`).then((d) => d.items),
+  createBill: (bid, body) => request(`/buildings/${bid}/bills`, { method: "POST", body }),
+  updateBill: (bid, id, patch) =>
+    request(`/buildings/${bid}/bills/${id}`, { method: "PATCH", body: patch }),
+  deleteBill: (bid, id) => request(`/buildings/${bid}/bills/${id}`, { method: "DELETE" }),
+  generateBills: (bid, body) =>
+    request(`/buildings/${bid}/bills/generate`, { method: "POST", body }).then((d) => d.items),
+  recordPayment: (bid, id, body) =>
+    request(`/buildings/${bid}/bills/${id}/payments`, { method: "POST", body }),
+
+  // --- contracts / documents ---
+  parseContract: (bid, file) => upload(`/buildings/${bid}/contracts/parse`, file),
+  uploadImage: (bid, file) => upload(`/buildings/${bid}/contracts/upload`, file),
+  contractImageUrl: (bid, imageId) => `${BASE}/buildings/${bid}/contracts/${imageId}`,
+
+  // --- chat ---
+  chat: (message, history) => request("/chat", { method: "POST", body: { message, history } }),
 };
 
-export const STATUSES = ["todo", "in_progress", "blocked", "done"];
-export const PRIORITIES = ["low", "medium", "high", "urgent"];
-export const ITEM_TYPES = ["story", "task", "bug"];
-export const SPRINT_STATUSES = ["planned", "active", "completed"];
+// ---------- shared constants & helpers ----------
 
-export const STATUS_LABELS = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  blocked: "Blocked",
-  done: "Done",
+export const BILL_TYPES = ["rent", "water", "electricity", "maintenance", "other"];
+export const BILL_STATUSES = ["unpaid", "partial", "paid", "overdue"];
+
+export const BILL_TYPE_META = {
+  rent: { label: "Rent", icon: "🏠", color: "#2563eb" },
+  water: { label: "Water", icon: "💧", color: "#0ea5e9" },
+  electricity: { label: "Electricity", icon: "⚡", color: "#f59e0b" },
+  maintenance: { label: "Maintenance", icon: "🔧", color: "#7c3aed" },
+  other: { label: "Other", icon: "📄", color: "#64748b" },
 };
 
-export const ITEM_TYPE_META = {
-  story: { icon: "📘", label: "Story", color: "text-emerald-600" },
-  task: { icon: "✅", label: "Task", color: "text-sky-600" },
-  bug: { icon: "🐞", label: "Bug", color: "text-red-600" },
+export const STATUS_STYLES = {
+  unpaid: "bg-slate-100 text-slate-600",
+  partial: "bg-amber-100 text-amber-700",
+  paid: "bg-emerald-100 text-emerald-700",
+  overdue: "bg-red-100 text-red-700",
 };
 
-export const PRIORITY_STYLES = {
-  low: "bg-slate-100 text-slate-600",
-  medium: "bg-sky-100 text-sky-700",
-  high: "bg-amber-100 text-amber-700",
-  urgent: "bg-red-100 text-red-700",
-};
-
-// Palette offered when creating a member without an explicit color.
 export const AVATAR_COLORS = [
-  "#6366f1", "#0ea5e9", "#10b981", "#f59e0b",
-  "#ef4444", "#ec4899", "#8b5cf6", "#14b8a6",
+  "#2563eb", "#0ea5e9", "#0d9488", "#7c3aed",
+  "#db2777", "#ea580c", "#16a34a", "#475569",
 ];
+
+export function rupees(amount) {
+  const n = Number(amount || 0);
+  return `₹${n.toLocaleString("en-IN")}`;
+}
 
 export function initials(name) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function currentPeriod() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+export function formatPeriod(period) {
+  if (!period) return "";
+  const [y, m] = period.split("-");
+  const idx = Number(m) - 1;
+  return MONTH_NAMES[idx] ? `${MONTH_NAMES[idx]} ${y}` : period;
+}
+
+// Last N months as { value: "2026-06", label: "June 2026" }, newest first.
+export function recentPeriods(n = 12) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < n; i++) {
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    out.push({ value, label: formatPeriod(value) });
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
 }

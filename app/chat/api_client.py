@@ -1,4 +1,4 @@
-"""Thin HTTP client for the Task Tracker API, used by the Streamlit UI."""
+"""Thin HTTP client the chat assistant uses to call the API as the signed-in user."""
 from __future__ import annotations
 
 from typing import Any
@@ -22,56 +22,49 @@ class ApiClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
-    def login(self, username: str) -> str:
-        resp = httpx.post(f"{self.base_url}/auth/token", json={"username": username}, timeout=10.0)
-        resp.raise_for_status()
-        self._token = resp.json()["access_token"]
-        return self._token
-
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         resp = httpx.request(
-            method, f"{self.base_url}{path}", headers=self._headers(), timeout=10.0, **kwargs
+            method, f"{self.base_url}{path}", headers=self._headers(), timeout=15.0, **kwargs
         )
         if resp.status_code >= 400:
             raise ApiError(f"{resp.status_code}: {resp.text}")
         return resp
 
-    # --- projects ---
-    def list_projects(self) -> list[dict[str, Any]]:
-        return self._request("GET", "/projects").json()["items"]
+    # --- buildings ---
+    def list_buildings(self) -> list[dict[str, Any]]:
+        return self._request("GET", "/buildings").json()["items"]
 
-    def create_project(self, name: str, description: str | None = None) -> dict[str, Any]:
-        body = {"name": name, "description": description}
-        return self._request("POST", "/projects", json=body).json()
+    def create_building(self, name: str, address: str | None = None) -> dict[str, Any]:
+        body = {"name": name, "address": address}
+        return self._request("POST", "/buildings", json=body).json()
 
-    # --- members & sprints ---
-    def list_members(self, project_id: str) -> list[dict[str, Any]]:
-        return self._request("GET", f"/projects/{project_id}/members").json()["items"]
+    # --- units & tenants ---
+    def list_units(self, building_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/buildings/{building_id}/units").json()["items"]
 
-    def list_sprints(self, project_id: str) -> list[dict[str, Any]]:
-        return self._request("GET", f"/projects/{project_id}/sprints").json()["items"]
+    def list_tenants(self, building_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/buildings/{building_id}/tenants").json()["items"]
 
-    # --- tasks ---
-    def list_tasks(self, project_id: str, status: str | None = None) -> list[dict[str, Any]]:
-        params = {"status": status} if status else None
-        return self._request("GET", f"/projects/{project_id}/tasks", params=params).json()["items"]
-
-    def create_task(
+    # --- bills ---
+    def list_bills(
         self,
-        project_id: str,
-        title: str,
-        status: str = "todo",
-        priority: str = "medium",
-        item_type: str = "task",
-        points: int | None = None,
-        assignee_id: str | None = None,
-    ) -> dict[str, Any]:
-        body = {
-            "title": title,
-            "status": status,
-            "priority": priority,
-            "item_type": item_type,
-            "points": points,
-            "assignee_id": assignee_id,
-        }
-        return self._request("POST", f"/projects/{project_id}/tasks", json=body).json()
+        building_id: str,
+        period: str | None = None,
+        status: str | None = None,
+        bill_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params = {}
+        if period:
+            params["period"] = period
+        if status:
+            params["status"] = status
+        if bill_type:
+            params["bill_type"] = bill_type
+        return self._request(
+            "GET", f"/buildings/{building_id}/bills", params=params or None
+        ).json()["items"]
+
+    # --- dashboard ---
+    def dashboard(self, period: str | None = None) -> dict[str, Any]:
+        params = {"period": period} if period else None
+        return self._request("GET", "/dashboard", params=params).json()
