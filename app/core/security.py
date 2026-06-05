@@ -9,6 +9,7 @@ account's stable object id) identifies the user throughout the API.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import Depends, HTTPException, status
@@ -18,6 +19,10 @@ from jose import JWTError, jwt
 from app.core.config import Settings, get_settings
 
 _bearer = HTTPBearer(auto_error=True)
+
+# Local accounts get a "local:" subject prefix so they never collide with a
+# Microsoft object id, and so per-user data partitions stay distinct by source.
+_LOCAL_PREFIX = "local:"
 
 # Microsoft v2.0 issuers look like https://login.microsoftonline.com/<tenant-id>/v2.0
 # The tenant id varies per account (work tenants + the personal-accounts tenant),
@@ -61,18 +66,34 @@ def _signing_key(kid: str, authority: str) -> dict | None:
     return _jwks_cache.get(kid)
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
-    settings: Settings = Depends(get_settings),
-) -> str:
-    """Validate the Microsoft ID token and return the user's stable id.
+def create_access_token(subject: str, settings: Settings) -> str:
+    """Mint a local HS256 token for an email/password account."""
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": f"{_LOCAL_PREFIX}{subject}",
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
+    }
+    return jwt.encode(claims, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
-    Raises 401 if the token is missing, malformed, or fails validation.
-    """
+
+def _validate_local(token: str, settings: Settings) -> str:
+    """Validate a token this API issued for a local account."""
+    try:
+        claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError as exc:
+        raise _unauthorized("Invalid or expired token") from exc
+    subject = claims.get("sub")
+    if not subject:
+        raise _unauthorized("Token missing subject")
+    return subject
+
+
+def _validate_microsoft(token: str, settings: Settings) -> str:
+    """Validate a Microsoft (Entra ID) ID token against Microsoft's public keys."""
     if not settings.azure_client_id:
         raise _unauthorized("Microsoft sign-in is not configured (AZURE_CLIENT_ID unset)")
 
-    token = credentials.credentials
     try:
         kid = jwt.get_unverified_header(token).get("kid")
     except JWTError as exc:
@@ -105,3 +126,24 @@ def get_current_user(
     if not subject:
         raise _unauthorized("Token missing subject")
     return subject
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    settings: Settings = Depends(get_settings),
+) -> str:
+    """Return the user's stable id from the bearer token.
+
+    Two token sources are accepted, distinguished by signing algorithm:
+    local accounts (HS256, issued by this API) and Microsoft (RS256, Entra ID).
+    Raises 401 if the token is missing, malformed, or fails validation.
+    """
+    token = credentials.credentials
+    try:
+        alg = jwt.get_unverified_header(token).get("alg")
+    except JWTError as exc:
+        raise _unauthorized("Malformed token") from exc
+
+    if alg == settings.jwt_algorithm:  # HS256 → a token we issued
+        return _validate_local(token, settings)
+    return _validate_microsoft(token, settings)

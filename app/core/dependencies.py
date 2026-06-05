@@ -11,6 +11,11 @@ from app.services.member_service import MemberService
 from app.services.project_service import ProjectService
 from app.services.sprint_service import SprintService
 from app.services.task_service import TaskService
+from app.services.user_service import UserService
+
+
+def get_user_service(request: Request) -> UserService:
+    return request.app.state.user_service
 
 
 def get_project_service(request: Request) -> ProjectService:

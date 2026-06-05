@@ -4,7 +4,7 @@ import { PublicClientApplication, EventType } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
 import App from "./App.jsx";
 import { BASE } from "./api";
-import { setMsalInstance } from "./auth";
+import { setMsalInstance, setMicrosoftEnabled } from "./auth";
 import "./index.css";
 
 function Notice({ title, detail }) {
@@ -32,20 +32,15 @@ async function bootstrap() {
     return;
   }
 
-  if (!cfg.client_id) {
-    root.render(
-      <Notice
-        title="Microsoft sign-in isn't configured."
-        detail="Set AZURE_CLIENT_ID on the API (see README) and reload."
-      />
-    );
-    return;
-  }
+  // Microsoft sign-in is optional; local accounts work without it. When no
+  // client id is configured we still build an MSAL instance (with a placeholder
+  // id) so the context exists, but the UI hides the Microsoft button.
+  setMicrosoftEnabled(!!cfg.client_id);
 
   const pca = new PublicClientApplication({
     auth: {
-      clientId: cfg.client_id,
-      authority: cfg.authority,
+      clientId: cfg.client_id || "00000000-0000-0000-0000-000000000000",
+      authority: cfg.authority || "https://login.microsoftonline.com/common",
       redirectUri: window.location.origin,
     },
     cache: { cacheLocation: "localStorage" },

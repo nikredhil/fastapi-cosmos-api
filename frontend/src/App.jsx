@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { api } from "./api";
-import { getActiveAccount } from "./auth";
+import { getActiveAccount, getLocalSession, clearLocalSession } from "./auth";
 import Login from "./components/Login";
 import Board from "./components/Board";
 import ChatPanel from "./components/ChatPanel";
@@ -12,9 +12,12 @@ import SprintsModal from "./components/SprintsModal";
 
 export default function App() {
   const { instance } = useMsal();
-  const isAuthenticated = useIsAuthenticated();
+  const msAuthenticated = useIsAuthenticated();
+  const [localSession, setLocalSession] = useState(() => getLocalSession());
   const account = getActiveAccount();
-  const username = account?.name || account?.username || "";
+
+  const isAuthenticated = msAuthenticated || !!localSession;
+  const username = localSession?.name || account?.name || account?.username || "";
 
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -30,7 +33,12 @@ export default function App() {
   const [error, setError] = useState(null);
 
   const logout = useCallback(() => {
-    instance.logoutPopup().catch(() => {});
+    if (getLocalSession()) {
+      clearLocalSession();
+      setLocalSession(null);
+    } else {
+      instance.logoutPopup().catch(() => {});
+    }
   }, [instance]);
 
   const guard = useCallback(
@@ -190,7 +198,7 @@ export default function App() {
 
   const selected = projects.find((p) => p.id === selectedId) || null;
 
-  if (!isAuthenticated) return <Login />;
+  if (!isAuthenticated) return <Login onLocalAuthed={() => setLocalSession(getLocalSession())} />;
 
   return (
     <div className="flex h-screen overflow-hidden">

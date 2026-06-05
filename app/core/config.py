@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     azure_client_id: str | None = None
     azure_authority: str = "https://login.microsoftonline.com/common"
 
+    # Local email/password accounts. The API mints its own HS256 token for these,
+    # alongside (and distinct from) the RS256 tokens Microsoft issues.
+    jwt_secret: str = "dev-secret-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24
+
 
 @lru_cache
 def get_settings() -> Settings:

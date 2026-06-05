@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import os
 
-from app.api.routers import chat, health, members, projects, sprints, tasks
+from app.api.routers import auth, chat, health, members, projects, sprints, tasks
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.repositories import (
@@ -16,6 +16,7 @@ from app.db.repositories import (
     project_repository,
     sprint_repository,
     task_repository,
+    user_repository,
 )
 from app.db.repositories.base import BaseRepository
 from app.db.repositories.file_store import JsonFileRepository
@@ -24,10 +25,12 @@ from app.db.repositories.memory import InMemoryRepository
 from app.db.repositories.project_repository import ProjectRepository
 from app.db.repositories.sprint_repository import SprintRepository
 from app.db.repositories.task_repository import TaskRepository
+from app.db.repositories.user_repository import UserRepository
 from app.services.member_service import MemberService
 from app.services.project_service import ProjectService
 from app.services.sprint_service import SprintService
 from app.services.task_service import TaskService
+from app.services.user_service import UserService
 
 logger = get_logger(__name__)
 
@@ -37,6 +40,7 @@ _CONTAINERS = (
     (task_repository.CONTAINER_NAME, task_repository.PARTITION_KEY_FIELD),
     (member_repository.CONTAINER_NAME, member_repository.PARTITION_KEY_FIELD),
     (sprint_repository.CONTAINER_NAME, sprint_repository.PARTITION_KEY_FIELD),
+    (user_repository.CONTAINER_NAME, user_repository.PARTITION_KEY_FIELD),
 )
 
 
@@ -85,10 +89,12 @@ async def lifespan(app: FastAPI):
     task_service = TaskService(
         TaskRepository(backends["tasks"]), project_service, member_service
     )
+    user_service = UserService(UserRepository(backends["users"]))
     app.state.project_service = project_service
     app.state.member_service = member_service
     app.state.sprint_service = sprint_service
     app.state.task_service = task_service
+    app.state.user_service = user_service
 
     yield
 
@@ -114,6 +120,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(tasks.router)
     app.include_router(members.router)

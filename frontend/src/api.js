@@ -19,6 +19,16 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
 }
 
 export const api = {
+  // --- local accounts (unauthenticated) ---
+  register: (email, password, displayName) =>
+    request("/auth/register", {
+      method: "POST",
+      auth: false,
+      body: { email, password, display_name: displayName || null },
+    }),
+  loginLocal: (email, password) =>
+    request("/auth/login", { method: "POST", auth: false, body: { email, password } }),
+
   // --- projects ---
   listProjects: () => request("/projects").then((d) => d.items),
   createProject: (name, description) =>
