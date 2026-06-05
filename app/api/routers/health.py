@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
-from app.core.security import create_access_token
 
 router = APIRouter(tags=["meta"])
 
@@ -27,20 +26,13 @@ async def health(settings: Settings = Depends(get_settings)) -> Health:
     )
 
 
-class TokenRequest(BaseModel):
-    username: str
+class AuthConfig(BaseModel):
+    client_id: str | None
+    authority: str
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-@router.post("/auth/token", response_model=TokenResponse, tags=["auth"])
-async def issue_token(
-    body: TokenRequest, settings: Settings = Depends(get_settings)
-) -> TokenResponse:
-    """Dev convenience endpoint: mint a token for any username so the API is
-    easy to try in Swagger. Replace with a real IdP flow in production."""
-    token = create_access_token(subject=body.username, settings=settings)
-    return TokenResponse(access_token=token)
+@router.get("/auth/config", response_model=AuthConfig, tags=["auth"])
+async def auth_config(settings: Settings = Depends(get_settings)) -> AuthConfig:
+    """Public MSAL configuration for the SPA, sourced from the API's environment
+    so the Azure client id lives in one place."""
+    return AuthConfig(client_id=settings.azure_client_id, authority=settings.azure_authority)

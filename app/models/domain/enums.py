@@ -16,3 +16,17 @@ class Priority(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+class ItemType(str, Enum):
+    """Work-item type, mirroring Zoho Sprints' Story / Task / Bug."""
+
+    STORY = "story"
+    TASK = "task"
+    BUG = "bug"
+
+
+class SprintStatus(str, Enum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    COMPLETED = "completed"

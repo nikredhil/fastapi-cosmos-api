@@ -15,17 +15,21 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Storage backend selector.
-    db_backend: Literal["memory", "cosmos"] = "memory"
+    db_backend: Literal["memory", "file", "cosmos"] = "memory"
+
+    # Directory for the JSON-file backend (only used when db_backend == "file").
+    data_dir: str = "./data"
 
     # Azure Cosmos DB (only required when db_backend == "cosmos").
     cosmos_endpoint: str | None = None
     cosmos_key: str | None = None
     cosmos_database: str = "tasktracker"
 
-    # JWT auth.
-    jwt_secret: str = "dev-secret-change-me"
-    jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60
+    # Microsoft Entra ID (Azure AD) sign-in. The SPA authenticates with Microsoft
+    # via MSAL and sends an ID token; the API validates it against Microsoft's
+    # public keys. azure_client_id is the app registration's Application (client) ID.
+    azure_client_id: str | None = None
+    azure_authority: str = "https://login.microsoftonline.com/common"
 
 
 @lru_cache

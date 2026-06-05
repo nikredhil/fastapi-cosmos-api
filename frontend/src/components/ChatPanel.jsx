@@ -3,7 +3,8 @@ import { api } from "../api";
 
 const SUGGESTIONS = ["what's blocked?", "summary", "list my projects"];
 
-export default function ChatPanel({ token, onDataChanged }) {
+export default function ChatPanel({ onDataChanged }) {
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -15,8 +16,8 @@ export default function ChatPanel({ token, onDataChanged }) {
   const endRef = useRef(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+    if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, busy, open]);
 
   async function send(text) {
     const message = (text ?? input).trim();
@@ -26,7 +27,7 @@ export default function ChatPanel({ token, onDataChanged }) {
     setMessages((m) => [...m, { role: "user", content: message }]);
     setBusy(true);
     try {
-      const res = await api.chat(token, message, history);
+      const res = await api.chat(message, history);
       setMessages((m) => [
         ...m,
         { role: "assistant", content: res.reply, backend: res.backend },
@@ -42,11 +43,34 @@ export default function ChatPanel({ token, onDataChanged }) {
     }
   }
 
+  // Collapsed: a floating launcher button in the bottom-right corner.
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        title="Open assistant"
+        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-2xl shadow-lg ring-1 ring-indigo-700/20 transition hover:scale-105 hover:bg-indigo-700"
+      >
+        💬
+      </button>
+    );
+  }
+
+  // Expanded: a floating chat window anchored to the bottom-right.
   return (
-    <div className="flex h-full w-[360px] flex-col border-l border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <h3 className="font-semibold text-slate-800">💬 Assistant</h3>
-        <p className="text-xs text-slate-500">Natural-language project & task control</p>
+    <div className="fixed bottom-5 right-5 z-40 flex h-[560px] max-h-[calc(100vh-2.5rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
+        <div>
+          <h3 className="font-semibold text-slate-800">💬 Assistant</h3>
+          <p className="text-xs text-slate-500">Natural-language project & task control</p>
+        </div>
+        <button
+          onClick={() => setOpen(false)}
+          title="Minimize"
+          className="rounded-md px-2 text-lg leading-none text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+        >
+          —
+        </button>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-4">

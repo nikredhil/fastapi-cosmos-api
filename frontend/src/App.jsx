@@ -1,27 +1,37 @@
 import { useState, useEffect, useCallback } from "react";
+import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { api } from "./api";
+import { getActiveAccount } from "./auth";
 import Login from "./components/Login";
 import Board from "./components/Board";
 import ChatPanel from "./components/ChatPanel";
+import SprintBar from "./components/SprintBar";
+import TaskDetail from "./components/TaskDetail";
+import MembersModal from "./components/MembersModal";
+import SprintsModal from "./components/SprintsModal";
 
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem("tt_token"));
-  const [username, setUsername] = useState(() => localStorage.getItem("tt_user"));
+  const { instance } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
+  const account = getActiveAccount();
+  const username = account?.name || account?.username || "";
+
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [sprints, setSprints] = useState([]);
+  const [selectedSprintId, setSelectedSprintId] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [showSprints, setShowSprints] = useState(false);
   const [newProject, setNewProject] = useState("");
   const [error, setError] = useState(null);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("tt_token");
-    localStorage.removeItem("tt_user");
-    setToken(null);
-    setUsername(null);
-    setProjects([]);
-    setSelectedId(null);
-    setTasks([]);
-  }, []);
+    instance.logoutPopup().catch(() => {});
+  }, [instance]);
 
   const guard = useCallback(
     async (fn) => {
@@ -36,21 +46,44 @@ export default function App() {
   );
 
   const loadProjects = useCallback(async () => {
-    if (!token) return;
+    if (!isAuthenticated) return;
     await guard(async () => {
-      const items = await api.listProjects(token);
+      const items = await api.listProjects();
       setProjects(items);
       setSelectedId((cur) => cur ?? items[0]?.id ?? null);
     });
-  }, [token, guard]);
+  }, [isAuthenticated, guard]);
 
   const loadTasks = useCallback(async () => {
-    if (!token || !selectedId) {
+    if (!isAuthenticated || !selectedId) {
       setTasks([]);
       return;
     }
-    await guard(async () => setTasks(await api.listTasks(token, selectedId)));
-  }, [token, selectedId, guard]);
+    await guard(async () =>
+      setTasks(
+        await api.listTasks(selectedId, {
+          sprintId: selectedSprintId === "all" ? undefined : selectedSprintId,
+          assigneeId: assigneeFilter || undefined,
+        })
+      )
+    );
+  }, [isAuthenticated, selectedId, selectedSprintId, assigneeFilter, guard]);
+
+  const loadMeta = useCallback(async () => {
+    if (!isAuthenticated || !selectedId) {
+      setMembers([]);
+      setSprints([]);
+      return;
+    }
+    await guard(async () => {
+      const [m, s] = await Promise.all([
+        api.listMembers(selectedId),
+        api.listSprints(selectedId),
+      ]);
+      setMembers(m);
+      setSprints(s);
+    });
+  }, [isAuthenticated, selectedId, guard]);
 
   useEffect(() => {
     loadProjects();
@@ -58,19 +91,24 @@ export default function App() {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+  useEffect(() => {
+    loadMeta();
+  }, [loadMeta]);
 
-  function onLogin(tok, user) {
-    localStorage.setItem("tt_token", tok);
-    localStorage.setItem("tt_user", user);
-    setToken(tok);
-    setUsername(user);
-  }
+  // Reset board filters and close overlays when switching projects.
+  useEffect(() => {
+    setSelectedSprintId("all");
+    setAssigneeFilter(null);
+    setSelectedTask(null);
+    setShowMembers(false);
+    setShowSprints(false);
+  }, [selectedId]);
 
   async function createProject(e) {
     e.preventDefault();
     if (!newProject.trim()) return;
     await guard(async () => {
-      const p = await api.createProject(token, newProject.trim());
+      const p = await api.createProject(newProject.trim());
       setNewProject("");
       await loadProjects();
       setSelectedId(p.id);
@@ -80,11 +118,79 @@ export default function App() {
   async function refreshAll() {
     await loadProjects();
     await loadTasks();
+    await loadMeta();
   }
+
+  // --- task handlers ---
+  const createTask = (task) =>
+    guard(async () => {
+      await api.createTask(selectedId, task);
+      await loadTasks();
+    });
+
+  const changeStatus = (task, status) =>
+    guard(async () => {
+      const updated = await api.updateTask(selectedId, task.id, { status });
+      await loadTasks();
+      if (selectedTask?.id === task.id) setSelectedTask(updated);
+    });
+
+  const updateTask = (patch) =>
+    guard(async () => {
+      const updated = await api.updateTask(selectedId, selectedTask.id, patch);
+      setSelectedTask(updated);
+      await loadTasks();
+    });
+
+  const addComment = (body) =>
+    guard(async () => {
+      const updated = await api.addComment(selectedId, selectedTask.id, body);
+      setSelectedTask(updated);
+      await loadTasks();
+    });
+
+  const deleteTask = (task) =>
+    guard(async () => {
+      await api.deleteTask(selectedId, task.id);
+      if (selectedTask?.id === task.id) setSelectedTask(null);
+      await loadTasks();
+    });
+
+  // --- member handlers ---
+  const addMember = (member) =>
+    guard(async () => {
+      await api.createMember(selectedId, member);
+      await loadMeta();
+    });
+  const deleteMember = (member) =>
+    guard(async () => {
+      await api.deleteMember(selectedId, member.id);
+      await loadMeta();
+      await loadTasks();
+    });
+
+  // --- sprint handlers ---
+  const addSprint = (sprint) =>
+    guard(async () => {
+      await api.createSprint(selectedId, sprint);
+      await loadMeta();
+    });
+  const updateSprint = (sprint, patch) =>
+    guard(async () => {
+      await api.updateSprint(selectedId, sprint.id, patch);
+      await loadMeta();
+    });
+  const deleteSprint = (sprint) =>
+    guard(async () => {
+      await api.deleteSprint(selectedId, sprint.id);
+      if (selectedSprintId === sprint.id) setSelectedSprintId("all");
+      await loadMeta();
+      await loadTasks();
+    });
 
   const selected = projects.find((p) => p.id === selectedId) || null;
 
-  if (!token) return <Login onLogin={onLogin} />;
+  if (!isAuthenticated) return <Login />;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -143,32 +249,64 @@ export default function App() {
             </button>
           </div>
         )}
+        {selected && (
+          <SprintBar
+            project={selected}
+            sprints={sprints}
+            members={members}
+            tasks={tasks}
+            selectedSprintId={selectedSprintId}
+            onSelectSprint={setSelectedSprintId}
+            assigneeFilter={assigneeFilter}
+            onAssigneeFilter={setAssigneeFilter}
+            onManageTeam={() => setShowMembers(true)}
+            onManageSprints={() => setShowSprints(true)}
+          />
+        )}
         <Board
           project={selected}
           tasks={tasks}
-          onCreateTask={(task) =>
-            guard(async () => {
-              await api.createTask(token, selectedId, task);
-              await loadTasks();
-            })
-          }
-          onChangeStatus={(task, status) =>
-            guard(async () => {
-              await api.updateTask(token, selectedId, task.id, { status });
-              await loadTasks();
-            })
-          }
-          onDelete={(task) =>
-            guard(async () => {
-              await api.deleteTask(token, selectedId, task.id);
-              await loadTasks();
-            })
-          }
+          members={members}
+          defaultSprintId={selectedSprintId}
+          onCreateTask={createTask}
+          onChangeStatus={changeStatus}
+          onDelete={deleteTask}
+          onOpen={setSelectedTask}
         />
       </main>
 
       {/* Chat */}
-      <ChatPanel token={token} onDataChanged={refreshAll} />
+      <ChatPanel onDataChanged={refreshAll} />
+
+      {/* Overlays */}
+      {selectedTask && (
+        <TaskDetail
+          task={selectedTask}
+          members={members}
+          sprints={sprints}
+          onUpdate={updateTask}
+          onAddComment={addComment}
+          onDelete={deleteTask}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
+      {showMembers && (
+        <MembersModal
+          members={members}
+          onAdd={addMember}
+          onDelete={deleteMember}
+          onClose={() => setShowMembers(false)}
+        />
+      )}
+      {showSprints && (
+        <SprintsModal
+          sprints={sprints}
+          onAdd={addSprint}
+          onUpdate={updateSprint}
+          onDelete={deleteSprint}
+          onClose={() => setShowSprints(false)}
+        />
+      )}
     </div>
   );
 }

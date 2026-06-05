@@ -44,6 +44,13 @@ class ApiClient:
         body = {"name": name, "description": description}
         return self._request("POST", "/projects", json=body).json()
 
+    # --- members & sprints ---
+    def list_members(self, project_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/projects/{project_id}/members").json()["items"]
+
+    def list_sprints(self, project_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/projects/{project_id}/sprints").json()["items"]
+
     # --- tasks ---
     def list_tasks(self, project_id: str, status: str | None = None) -> list[dict[str, Any]]:
         params = {"status": status} if status else None
@@ -55,12 +62,16 @@ class ApiClient:
         title: str,
         status: str = "todo",
         priority: str = "medium",
-        assignee: str | None = None,
+        item_type: str = "task",
+        points: int | None = None,
+        assignee_id: str | None = None,
     ) -> dict[str, Any]:
         body = {
             "title": title,
             "status": status,
             "priority": priority,
-            "assignee": assignee,
+            "item_type": item_type,
+            "points": points,
+            "assignee_id": assignee_id,
         }
         return self._request("POST", f"/projects/{project_id}/tasks", json=body).json()

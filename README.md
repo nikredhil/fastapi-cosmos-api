@@ -33,7 +33,7 @@ flowchart LR
     Cosmos[("Azure Cosmos DB")]
     Ollama["Ollama<br/>(local LLM, optional)"]
 
-    UI -->|"HTTPS + JWT"| R
+    UI -->|"HTTPS + Microsoft token"| R
     Repo --> Mem
     Repo --> Cosmos
     Chat -->|"tool calls"| Ollama
@@ -50,7 +50,7 @@ present.
 
 - **FastAPI + Uvicorn**, fully async (`async`/`await` end to end)
 - **Pluggable storage** behind a repository interface: in-memory (default) or **Azure Cosmos DB**
-- **JWT authentication** (HS256, validate-only) with per-user data isolation
+- **Sign in with Microsoft** (Entra ID / OIDC): the SPA authenticates via MSAL (Auth Code + PKCE); the API validates the ID token against Microsoft's public keys (RS256/JWKS), with per-user data isolation
 - **Layered design**: routers → services (business logic) → repositories → backend
 - **Pydantic v2** request/response models with validation and OpenAPI docs
 - **Structured logging** via `structlog`
@@ -66,7 +66,7 @@ app/
 ├── main.py                       # App factory, lifespan wiring, middleware
 ├── core/
 │   ├── config.py                 # Settings from env / .env
-│   ├── security.py               # JWT create + validate (HTTPBearer)
+│   ├── security.py               # Microsoft (Entra ID) token validation (JWKS/RS256)
 │   ├── logging.py                # structlog setup
 │   └── dependencies.py           # FastAPI dependency providers
 ├── db/
@@ -115,25 +115,35 @@ Open the interactive docs:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-### Try it (no auth setup required)
+### Authentication setup (Sign in with Microsoft)
+
+The API is protected by Microsoft Entra ID. Register a free app once:
+
+1. **Azure portal → Entra ID → App registrations → New registration.**
+2. **Supported account types:** *Accounts in any organizational directory and personal Microsoft accounts.*
+3. **Platform:** *Single-page application*, Redirect URI `http://localhost:5173`
+   (add your production origin later). No client secret is needed (public client + PKCE).
+4. Copy the **Application (client) ID** into the API's `.env` as `AZURE_CLIENT_ID`.
+
+The SPA fetches this config from `GET /auth/config`, so the client id lives only
+in the API environment. To allow just one tenant, set
+`AZURE_AUTHORITY=https://login.microsoftonline.com/<tenant-id>`.
+
+### Try the API with a token
+
+Protected routes need a Microsoft ID token. Sign in via the web app, then copy
+the `Authorization: Bearer …` value from a `/projects` request in the browser's
+DevTools → Network tab:
 
 ```bash
-# 1. Mint a dev token for any username
-TOKEN=$(curl -s -X POST localhost:8000/auth/token \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"alice"}' | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+TOKEN="<paste the ID token>"
 
-# 2. Create a project
+# Create a project
 PID=$(curl -s -X POST localhost:8000/projects \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"Website redesign"}' | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
 
-# 3. Add a task
-curl -s -X POST localhost:8000/projects/$PID/tasks \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"title":"Draft homepage","priority":"high"}'
-
-# 4. List tasks
+# List tasks
 curl -s localhost:8000/projects/$PID/tasks -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -142,8 +152,8 @@ curl -s localhost:8000/projects/$PID/tasks -H "Authorization: Bearer $TOKEN"
 With the server running, populate some realistic projects and tasks:
 
 ```bash
-python scripts/seed_data.py                       # targets http://localhost:8000
-API_BASE=http://localhost:8055 python scripts/seed_data.py
+API_TOKEN="<your Microsoft ID token>" python scripts/seed_data.py
+API_BASE=http://localhost:8055 API_TOKEN="<token>" python scripts/seed_data.py
 ```
 
 > The default in-memory backend is per-process, so re-seed after restarting the
@@ -165,8 +175,9 @@ npm run dev            # http://localhost:5173
 ```
 
 Point the UI at a non-default API by setting `VITE_API_BASE` (see
-`frontend/.env.example`). Sign in with any username — use `demo` to see the
-seeded data — then drag tasks through statuses or talk to the assistant.
+`frontend/.env.example`). Click **Sign in with Microsoft**, complete the popup,
+then manage tasks on the board or talk to the assistant. (Requires
+`AZURE_CLIENT_ID` on the API — see *Authentication setup* above.)
 
 ## Chat assistant: local LLM + fallback
 
@@ -202,10 +213,11 @@ Copy `.env.example` to `.env` and adjust. Key settings:
 
 | Variable        | Default            | Description                                   |
 | --------------- | ------------------ | --------------------------------------------- |
-| `DB_BACKEND`    | `memory`           | `memory` (zero setup) or `cosmos`             |
+| `DB_BACKEND`    | `memory`           | `memory` (zero setup), `file` (durable JSON), or `cosmos` |
 | `COSMOS_ENDPOINT` / `COSMOS_KEY` | —     | Required when `DB_BACKEND=cosmos`             |
 | `COSMOS_DATABASE` | `tasktracker`    | Cosmos database name (created if absent)       |
-| `JWT_SECRET`    | `dev-secret-...`   | HS256 signing secret — override in production  |
+| `AZURE_CLIENT_ID` | —                | Entra ID app (client) ID — **required** for sign-in |
+| `AZURE_AUTHORITY` | `…/common`       | Allowed accounts; use `…/<tenant-id>` for single-tenant |
 
 ### Using Azure Cosmos DB
 

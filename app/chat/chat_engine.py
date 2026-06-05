@@ -36,6 +36,7 @@ HELP_TEXT = (
     "  • *create project Marketing Site*\n"
     "  • *show tasks in Website Redesign*\n"
     "  • *what's blocked?*\n"
+    "  • *who is working on Alice?*\n"
     "  • *add task Write docs to Website Redesign (priority high)*\n"
     "  • *summary*"
 )
@@ -90,13 +91,20 @@ def _extract_priority(text: str) -> tuple[str, str]:
     return re.sub(r"\s{2,}", " ", cleaned), priority
 
 
+def _assignee_of(task: dict[str, Any]) -> str | None:
+    """Display name of a task's assignee (denormalized name, or legacy string)."""
+    return task.get("assignee_name") or task.get("assignee")
+
+
 def _format_tasks(tasks: list[dict[str, Any]]) -> str:
     if not tasks:
         return "  (no tasks)"
     lines = []
     for t in tasks:
-        who = f" — @{t['assignee']}" if t.get("assignee") else ""
-        lines.append(f"  • [{t['status']}] {t['title']} ({t['priority']}){who}")
+        who = f" — @{_assignee_of(t)}" if _assignee_of(t) else ""
+        pts = f" {t['points']}pts" if t.get("points") else ""
+        key = f"{t['key']} " if t.get("key") else ""
+        lines.append(f"  • {key}[{t['status']}] {t['title']} ({t['priority']}{pts}){who}")
     return "\n".join(lines)
 
 
@@ -172,6 +180,31 @@ def handle(client: SupportsApi, message: str) -> str:
         if total == 0:
             return f"No tasks are currently *{status}*."
         return f"{total} task(s) *{status}*:\n\n" + "\n\n".join(chunks)
+
+    # --- tasks assigned to a person: "who is working on Alice", "assigned to bob" ---
+    m = re.search(
+        r"(?:who(?:'s| is)?\s+working\s+on|assigned\s+to)\s+(.+)$",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        person = m.group(1).strip().strip("\"'?.")
+        who = person.lower()
+        chunks = []
+        total = 0
+        for project in client.list_projects():
+            matched = [
+                t
+                for t in client.list_tasks(project["id"])
+                if (_assignee_of(t) or "").lower() == who
+                or who in (_assignee_of(t) or "").lower()
+            ]
+            if matched:
+                total += len(matched)
+                chunks.append(f"{project['name']}:\n{_format_tasks(matched)}")
+        if total == 0:
+            return f"I couldn't find any tasks assigned to '{person}'."
+        return f"{total} task(s) assigned to {person}:\n\n" + "\n\n".join(chunks)
 
     # --- summary / overview ---
     if any(w in lowered for w in ("summary", "overview", "how many", "status report")):

@@ -23,12 +23,19 @@ class TaskRepository:
         self,
         project_id: str,
         status: str | None = None,
+        sprint_id: str | None = None,
+        assignee_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         filters: dict[str, Any] = {"project_id": project_id}
         if status is not None:
             filters["status"] = status
+        if sprint_id is not None:
+            # Sentinel "backlog" matches tasks with no sprint assigned.
+            filters["sprint_id"] = None if sprint_id == "backlog" else sprint_id
+        if assignee_id is not None:
+            filters["assignee_id"] = assignee_id
         return await self._backend.query(filters, limit=limit, offset=offset)
 
     async def update(self, document: dict[str, Any]) -> dict[str, Any]:

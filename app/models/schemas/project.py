@@ -21,5 +21,7 @@ class Project(BaseModel):
     owner: str = Field(description="Subject of the user who owns the project (partition key)")
     name: str
     description: str | None = None
+    key_prefix: str = Field(default="TT", description="Prefix for item keys, e.g. WEB")
+    task_counter: int = Field(default=0, description="Last assigned per-project item number")
     created_at: datetime
     updated_at: datetime

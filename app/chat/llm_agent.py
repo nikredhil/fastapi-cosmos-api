@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from app.chat.chat_engine import SupportsApi, _resolve_project
+from app.chat.chat_engine import SupportsApi, _assignee_of, _resolve_project
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:120b-cloud")
@@ -116,7 +116,11 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "enum": ["low", "medium", "high", "urgent"],
                     },
-                    "assignee": {"type": "string"},
+                    "item_type": {
+                        "type": "string",
+                        "enum": ["story", "task", "bug"],
+                    },
+                    "points": {"type": "integer", "description": "Story points (0-100)"},
                 },
                 "required": ["project_name", "title"],
             },
@@ -148,7 +152,8 @@ def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[s
                         "project": project["name"],
                         "title": task["title"],
                         "priority": task["priority"],
-                        "assignee": task.get("assignee"),
+                        "points": task.get("points"),
+                        "assignee": _assignee_of(task),
                     }
                 )
         return {"status": status, "tasks": matches}
@@ -167,7 +172,8 @@ def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[s
                         "title": t["title"],
                         "status": t["status"],
                         "priority": t["priority"],
-                        "assignee": t.get("assignee"),
+                        "points": t.get("points"),
+                        "assignee": _assignee_of(t),
                     }
                     for t in tasks
                 ],
@@ -178,7 +184,8 @@ def execute_tool(client: SupportsApi, name: str, args: dict[str, Any]) -> dict[s
             title=args["title"],
             status=args.get("status", "todo"),
             priority=args.get("priority", "medium"),
-            assignee=args.get("assignee"),
+            item_type=args.get("item_type", "task"),
+            points=args.get("points"),
         )
         return {"created_task": task["title"], "in_project": project["name"]}
 

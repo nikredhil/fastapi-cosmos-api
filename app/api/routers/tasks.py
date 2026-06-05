@@ -7,7 +7,7 @@ from app.core.dependencies import get_task_service
 from app.core.security import get_current_user
 from app.models.domain.enums import TaskStatus
 from app.models.schemas.common import Page
-from app.models.schemas.task import Task, TaskCreate, TaskUpdate
+from app.models.schemas.task import CommentCreate, Task, TaskCreate, TaskUpdate
 from app.services.task_service import ProjectNotFoundError, TaskNotFoundError, TaskService
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
@@ -34,6 +34,8 @@ async def create_task(
 async def list_tasks(
     project_id: str,
     status_filter: TaskStatus | None = Query(default=None, alias="status"),
+    sprint_id: str | None = Query(default=None, description="Sprint id, or 'backlog'"),
+    assignee_id: str | None = Query(default=None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: str = Depends(get_current_user),
@@ -44,6 +46,8 @@ async def list_tasks(
             owner=user,
             project_id=project_id,
             status=status_filter.value if status_filter else None,
+            sprint_id=sprint_id,
+            assignee_id=assignee_id,
             limit=limit,
             offset=offset,
         )
@@ -77,6 +81,24 @@ async def update_task(
 ) -> Task:
     try:
         return await service.update(
+            owner=user, project_id=project_id, task_id=task_id, payload=payload
+        )
+    except ProjectNotFoundError as exc:
+        raise _project_404(exc)
+    except TaskNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+
+@router.post("/{task_id}/comments", response_model=Task, status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    project_id: str,
+    task_id: str,
+    payload: CommentCreate,
+    user: str = Depends(get_current_user),
+    service: TaskService = Depends(get_task_service),
+) -> Task:
+    try:
+        return await service.add_comment(
             owner=user, project_id=project_id, task_id=task_id, payload=payload
         )
     except ProjectNotFoundError as exc:

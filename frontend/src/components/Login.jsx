@@ -1,52 +1,62 @@
 import { useState } from "react";
-import { api } from "../api";
+import { useMsal } from "@azure/msal-react";
+import { LOGIN_SCOPES } from "../auth";
 
-export default function Login({ onLogin }) {
-  const [username, setUsername] = useState("demo");
-  const [error, setError] = useState(null);
+function MicrosoftLogo() {
+  return (
+    <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
+      <span className="bg-[#f25022]" />
+      <span className="bg-[#7fba00]" />
+      <span className="bg-[#00a4ef]" />
+      <span className="bg-[#ffb900]" />
+    </span>
+  );
+}
+
+export default function Login() {
+  const { instance } = useMsal();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
 
-  async function submit(e) {
-    e.preventDefault();
-    if (!username.trim()) return;
+  async function signIn() {
     setBusy(true);
     setError(null);
     try {
-      const token = await api.login(username.trim());
-      onLogin(token, username.trim());
+      await instance.loginPopup({ scopes: LOGIN_SCOPES });
+      // On success the MSAL event callback sets the active account and the app
+      // re-renders into the authenticated view.
     } catch (err) {
-      setError("Couldn't reach the API. Is the server running on the configured port?");
+      if (err?.errorCode !== "user_cancelled") {
+        setError("Sign-in failed. Please try again.");
+      }
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200"
-      >
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
         <h1 className="text-2xl font-bold text-slate-800">✅ Task Tracker</h1>
         <p className="mt-1 text-sm text-slate-500">
-          FastAPI · JWT auth · LLM assistant. Any username works in this demo.
+          Sign in with your Microsoft account to continue.
         </p>
-        <label className="mt-6 block text-sm font-medium text-slate-700">Username</label>
-        <input
-          autoFocus
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-        />
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
         <button
-          type="submit"
+          onClick={signIn}
           disabled={busy}
-          className="mt-6 w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+          className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
         >
-          {busy ? "Signing in…" : "Sign in"}
+          <MicrosoftLogo />
+          {busy ? "Signing in…" : "Sign in with Microsoft"}
         </button>
-      </form>
+
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+        <p className="mt-6 text-xs text-slate-400">
+          Work, school, and personal Microsoft accounts are supported.
+        </p>
+      </div>
     </div>
   );
 }

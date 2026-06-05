@@ -117,6 +117,20 @@ def test_summary() -> None:
     assert "1 task" in reply
 
 
+def test_assigned_to_person() -> None:
+    client = FakeClient()
+    p = client.create_project("Alpha")
+    client.create_task(p["id"], title="Build nav", assignee="Alice")
+    client.create_task(p["id"], title="Write docs", assignee="Bob")
+
+    reply = handle(client, "who is working on Alice?")
+    assert "Build nav" in reply
+    assert "Write docs" not in reply
+
+    miss = handle(client, "assigned to Nobody")
+    assert "couldn't find" in miss.lower()
+
+
 def test_unknown_message() -> None:
     client = FakeClient()
     assert "not sure" in handle(client, "make me a sandwich").lower()

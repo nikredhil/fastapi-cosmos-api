@@ -67,14 +67,14 @@ async def test_task_flow_and_isolation(client: AsyncClient, auth_headers: dict[s
     assert resp.json()["count"] == 0
 
 
-async def _headers_for(client: AsyncClient, username: str) -> dict[str, str]:
-    token = (await client.post("/auth/token", json={"username": username})).json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+def _headers_for(username: str) -> dict[str, str]:
+    # The test auth override (conftest) treats the Bearer value as the user id.
+    return {"Authorization": f"Bearer {username}"}
 
 
 async def test_cannot_access_other_users_project(client: AsyncClient) -> None:
-    alice = await _headers_for(client, "alice")
-    bob = await _headers_for(client, "bob")
+    alice = _headers_for("alice")
+    bob = _headers_for("bob")
 
     # Alice creates a project; the partition key is her user subject.
     pid = (

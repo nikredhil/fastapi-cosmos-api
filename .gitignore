@@ -11,6 +11,9 @@ venv/
 env/
 .env
 
+# Local JSON-file storage backend (DB_BACKEND=file)
+data/
+
 # IDE / OS
 .vscode/
 .idea/
