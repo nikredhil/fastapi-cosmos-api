@@ -51,8 +51,9 @@ services:
       # Contract parsing (optional). Set the value in the dashboard.
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Haiku 4.5 is the cheapest vision-capable model — ~$0.003 per contract.
       - key: ANTHROPIC_MODEL
-        value: claude-opus-4-8
+        value: claude-haiku-4-5-20251001
 
     # Persistent disk (paid plans only). Uncomment to keep file-backend data and
     # uploaded images across restarts; DATA_DIR/UPLOADS_DIR above point at it.
