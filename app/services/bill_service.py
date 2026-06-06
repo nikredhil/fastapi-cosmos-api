@@ -5,6 +5,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from app.db.repositories.bill_repository import BillRepository
+from app.models.domain.enums import BillType
 from app.models.schemas.bill import (
     Bill,
     BillCreate,
@@ -185,6 +186,73 @@ class BillService:
         }
         doc.setdefault("payments", []).append(payment)
         doc["paid_amount"] = sum(p.get("amount", 0) for p in doc["payments"])
+        doc["status"] = _status_for(int(doc.get("amount", 0)), doc["paid_amount"], doc.get("due_date"))
+        doc["updated_at"] = now.isoformat()
+        updated = await self._repo.update(doc)
+        return self._to_model(updated)
+
+    async def set_rent_status(
+        self, owner: str, building_id: str, tenant_id: str, period: str, paid: bool
+    ) -> Bill | None:
+        """One-click toggle of a tenant's rent for a month (rent tracker grid).
+
+        Marking paid creates the rent bill from the active lease if none exists,
+        then settles it in full. Un-marking clears the recorded payments.
+        """
+        await self._assert_building(owner, building_id)
+        existing = await self._repo.list_for_building(building_id, period=period)
+        doc = next(
+            (
+                b for b in existing
+                if b.get("tenant_id") == tenant_id and b.get("bill_type") == "rent"
+            ),
+            None,
+        )
+
+        if doc is None:
+            if not paid:
+                return None  # nothing recorded to clear
+            leases = await self._leases.list(owner, building_id, limit=1000, offset=0)
+            lease = next(
+                (
+                    l for l in leases
+                    if l.tenant_id == tenant_id and l.status.value == "active"
+                ),
+                None,
+            )
+            bill = await self.create(
+                owner,
+                building_id,
+                BillCreate(
+                    unit_id=lease.unit_id if lease else None,
+                    tenant_id=tenant_id,
+                    bill_type=BillType.RENT,
+                    period=period,
+                    amount=lease.monthly_rent if lease else 0,
+                    due_date=_due_date_for(period, lease.rent_due_day) if lease else None,
+                ),
+            )
+            doc = await self._repo.get(bill.id, building_id)
+            if doc is None:  # pragma: no cover - just-created
+                return bill
+
+        now = datetime.now(timezone.utc)
+        if paid:
+            amount = int(doc.get("amount", 0))
+            doc["payments"] = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "amount": amount,
+                    "method": "manual",
+                    "note": "Marked paid",
+                    "paid_on": now.date().isoformat(),
+                    "created_at": now.isoformat(),
+                }
+            ]
+            doc["paid_amount"] = amount
+        else:
+            doc["payments"] = []
+            doc["paid_amount"] = 0
         doc["status"] = _status_for(int(doc.get("amount", 0)), doc["paid_amount"], doc.get("due_date"))
         doc["updated_at"] = now.isoformat()
         updated = await self._repo.update(doc)

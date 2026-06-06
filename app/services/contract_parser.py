@@ -34,7 +34,9 @@ CONTRACT_SCHEMA: dict[str, Any] = {
         "unit_label": {
             "type": ["string", "null"],
             "description": (
-                "Flat/unit identifier of the RENTED premises, e.g. 'Flat 503', 'A-101' or '102'"
+                "The 3-digit flat number of the rented premises. It always follows the label "
+                "'Flat No.' (e.g. 'Flat No.503' -> '503'). Return ONLY the 3 digits — never the "
+                "building/door number (e.g. 'No. 2441'), floor, street or any words."
             ),
         },
         "monthly_rent": {

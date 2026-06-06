@@ -75,12 +75,29 @@ export default function TenantDetail() {
     }
   }
 
-  async function uploadContract(leaseId, file) {
-    if (!file || !leaseId) return;
+  // Pages already on a lease, tolerating the legacy single-image field.
+  function leasePages(l) {
+    if (l.contract_image_ids?.length) return l.contract_image_ids;
+    return l.contract_image_id ? [l.contract_image_id] : [];
+  }
+
+  async function uploadContract(leaseId, fileInput) {
+    const list = fileInput instanceof File ? [fileInput] : Array.from(fileInput || []);
+    if (!list.length || !leaseId) return;
     setUploading(true);
     try {
-      const { image_id } = await api.uploadImage(buildingId, file);
-      await api.updateLease(buildingId, leaseId, { contract_image_id: image_id });
+      const lease = leases.find((l) => l.id === leaseId);
+      const existing = lease ? leasePages(lease) : [];
+      const added = [];
+      for (const f of list) {
+        const { image_id } = await api.uploadImage(buildingId, f);
+        added.push(image_id);
+      }
+      const all = [...existing, ...added];
+      await api.updateLease(buildingId, leaseId, {
+        contract_image_ids: all,
+        contract_image_id: all[0],
+      });
       await load();
     } catch (e) {
       setError(e.message);
@@ -196,32 +213,44 @@ export default function TenantDetail() {
                       {` · due day ${l.rent_due_day}`}
                     </p>
                     {l.terms && <p className="mt-2 text-xs text-slate-600">{l.terms}</p>}
-                    {l.contract_image_id ? (
-                      <button
-                        onClick={() => setLightbox({
-                          url: api.contractImageUrl(buildingId, l.contract_image_id),
-                          alt: "Lease contract",
-                        })}
-                        title="Click to expand"
-                        className="group mt-3 block w-full overflow-hidden rounded-lg border border-slate-200"
-                      >
-                        <AuthImage
-                          url={api.contractImageUrl(buildingId, l.contract_image_id)}
-                          alt="contract"
-                          className="h-40 w-full object-cover transition group-hover:scale-105"
-                        />
-                      </button>
+                    {leasePages(l).length > 0 ? (
+                      <>
+                        <p className="mt-3 text-xs font-medium text-slate-400">
+                          {leasePages(l).length} page(s)
+                        </p>
+                        <div className="mt-1 grid grid-cols-3 gap-2">
+                          {leasePages(l).map((imgId, i) => (
+                            <button key={imgId}
+                              onClick={() => setLightbox({
+                                url: api.contractImageUrl(buildingId, imgId),
+                                alt: `Lease page ${i + 1}`,
+                              })}
+                              title={`Page ${i + 1} — click to expand`}
+                              className="group relative block overflow-hidden rounded-lg border border-slate-200"
+                            >
+                              <AuthImage
+                                url={api.contractImageUrl(buildingId, imgId)}
+                                alt={`page ${i + 1}`}
+                                className="h-24 w-full object-cover transition group-hover:scale-105"
+                              />
+                              <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
+                                {i + 1}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
                     ) : (
                       <div className="mt-3 flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center">
                         <DocumentIcon className="h-6 w-6 text-slate-400" />
-                        <span className="text-xs text-slate-500">No contract image</span>
+                        <span className="text-xs text-slate-500">No contract pages</span>
                       </div>
                     )}
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <Button variant="secondary" disabled={uploading}
                         onClick={() => { pendingLease.current = l.id; contractFileRef.current?.click(); }}>
                         <DocumentIcon className="h-4 w-4" />
-                        {l.contract_image_id ? "Replace" : "Upload"}
+                        {leasePages(l).length ? "Add pages" : "Upload"}
                       </Button>
                       <Button variant="secondary" disabled={uploading}
                         onClick={() => setContractCameraLease(l.id)}>
@@ -292,8 +321,8 @@ export default function TenantDetail() {
         />
       )}
 
-      <input ref={contractFileRef} type="file" accept="image/*" className="hidden"
-        onChange={(e) => uploadContract(pendingLease.current, e.target.files?.[0])} />
+      <input ref={contractFileRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={(e) => uploadContract(pendingLease.current, e.target.files)} />
       {contractCameraLease && (
         <CameraCapture
           title="Capture lease contract"

@@ -12,6 +12,7 @@ from app.models.schemas.bill import (
     BillUpdate,
     GenerateBillsRequest,
     PaymentCreate,
+    RentStatusRequest,
 )
 from app.models.schemas.common import Page
 from app.services.bill_service import BillNotFoundError, BillService
@@ -81,6 +82,26 @@ async def generate_bills(
     except BuildingNotFoundError:
         raise _building_404()
     return Page[Bill](items=items, limit=len(items), offset=0, count=len(items))
+
+
+@router.post("/rent-status", response_model=Bill | None)
+async def set_rent_status(
+    building_id: str,
+    payload: RentStatusRequest,
+    user: str = Depends(get_current_user),
+    service: BillService = Depends(get_bill_service),
+) -> Bill | None:
+    """Mark a tenant's rent for a month paid/unpaid (rent tracker grid)."""
+    try:
+        return await service.set_rent_status(
+            owner=user,
+            building_id=building_id,
+            tenant_id=payload.tenant_id,
+            period=payload.period,
+            paid=payload.paid,
+        )
+    except BuildingNotFoundError:
+        raise _building_404()
 
 
 @router.patch("/{bill_id}", response_model=Bill)

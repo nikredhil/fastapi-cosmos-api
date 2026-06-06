@@ -14,23 +14,26 @@ const EMPTY = {
 // (2) review/edit the fields and create the tenant + lease.
 export default function ContractUpload({ building, units, onClose, onComplete }) {
   const [step, setStep] = useState("upload"); // upload | review
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState([]); // all pages (File[])
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [imageId, setImageId] = useState(null);
+  const [imageIds, setImageIds] = useState([]); // pages already uploaded (during parse)
   const [form, setForm] = useState(EMPTY);
   const [cameraOn, setCameraOn] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  function pickFile(f) {
-    if (!f) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+  function addFiles(list) {
+    const arr = Array.from(list || []).filter(Boolean);
+    if (!arr.length) return;
+    setFiles((prev) => [...prev, ...arr]);
     setError(null);
+  }
+
+  function removeFile(i) {
+    setFiles((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function stopCamera() {
@@ -78,8 +81,8 @@ export default function ContractUpload({ building, units, onClose, onComplete })
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
-        pickFile(new File([blob], `contract-${Date.now()}.jpg`, { type: "image/jpeg" }));
-        stopCamera();
+        // Keep the camera on so all pages can be captured in one go.
+        addFiles([new File([blob], `contract-${Date.now()}.jpg`, { type: "image/jpeg" })]);
       },
       "image/jpeg",
       0.92
@@ -87,12 +90,13 @@ export default function ContractUpload({ building, units, onClose, onComplete })
   }
 
   async function parse() {
-    if (!file) return;
+    if (!files.length) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await api.parseContract(building.id, file);
-      setImageId(res.contract_image_id);
+      // Parse the first page (it carries the key fields); all pages are stored on save.
+      const res = await api.parseContract(building.id, files[0]);
+      setImageIds([res.contract_image_id]);
       setForm({
         tenant_name: res.tenant_name || "",
         tenant_age: res.tenant_age ?? "",
@@ -142,6 +146,15 @@ export default function ContractUpload({ building, units, onClose, onComplete })
       const increasePct =
         form.rent_increase_pct === "" ? null : Number(form.rent_increase_pct);
 
+      // Pages 0..imageIds.length were uploaded during parse; upload the rest now.
+      const pending = files.slice(imageIds.length);
+      const uploaded = [];
+      for (const f of pending) {
+        const { image_id } = await api.uploadImage(building.id, f);
+        uploaded.push(image_id);
+      }
+      const pageIds = [...imageIds, ...uploaded];
+
       // Match an existing unit by label, else create one.
       let unit = units.find(
         (u) => u.label.toLowerCase() === form.unit_label.trim().toLowerCase()
@@ -178,8 +191,9 @@ export default function ContractUpload({ building, units, onClose, onComplete })
         lease_months: leaseMonths,
         rent_increase_pct: increasePct,
         terms: form.terms_summary || null,
-        contract_image_id: imageId,
-        parsed: !!imageId,
+        contract_image_id: pageIds[0] || null,
+        contract_image_ids: pageIds,
+        parsed: imageIds.length > 0,
       });
 
       onComplete();
@@ -200,50 +214,67 @@ export default function ContractUpload({ building, units, onClose, onComplete })
       {step === "upload" ? (
         <div className="space-y-4">
           <p className="text-sm text-slate-500">
-            Upload a photo or scan of the rental agreement. Claude reads it and pre-fills the
-            tenant, rent, deposit, and dates — you confirm before saving.
+            Add every page of the rental agreement (e.g. all 6). Claude reads the first page to
+            pre-fill the tenant, rent, deposit, and dates — all pages are saved with the lease.
           </p>
           {cameraOn ? (
             <div className="space-y-3">
               <video ref={videoRef} autoPlay playsInline
                 className="w-full rounded-xl bg-black" />
               <div className="flex justify-between gap-2">
-                <Button variant="secondary" onClick={stopCamera}>Cancel</Button>
-                <Button onClick={capturePhoto}><CameraIcon className="h-4 w-4" /> Capture</Button>
+                <Button onClick={capturePhoto}>
+                  <CameraIcon className="h-4 w-4" /> Capture page {files.length + 1}
+                </Button>
+                <Button variant="secondary" onClick={stopCamera}>Done</Button>
               </div>
             </div>
           ) : (
             <>
-              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center hover:border-blue-400">
-                {preview ? (
-                  <img src={preview} alt="contract preview"
-                    className="max-h-48 rounded-lg object-contain" />
-                ) : (
-                  <>
-                    <DocumentIcon className="h-9 w-9 text-slate-400" />
-                    <span className="mt-2 text-sm font-medium text-slate-600">
-                      Click to choose an image
-                    </span>
-                    <span className="text-xs text-slate-400">JPG, PNG, or WEBP up to 10 MB</span>
-                  </>
-                )}
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={(e) => pickFile(e.target.files?.[0])} />
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {files.map((f, i) => (
+                    <div key={i} className="relative">
+                      <img src={URL.createObjectURL(f)} alt={`page ${i + 1}`}
+                        className="h-20 w-16 rounded-lg border border-slate-200 object-cover" />
+                      <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
+                        {i + 1}
+                      </span>
+                      <button type="button" onClick={() => removeFile(i)}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white shadow">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center hover:border-blue-400">
+                <DocumentIcon className="h-9 w-9 text-slate-400" />
+                <span className="mt-2 text-sm font-medium text-slate-600">
+                  {files.length ? "Add more pages" : "Click to choose image(s)"}
+                </span>
+                <span className="text-xs text-slate-400">JPG, PNG, or WEBP up to 10 MB each</span>
+                <input type="file" accept="image/*" multiple className="hidden"
+                  onChange={(e) => addFiles(e.target.files)} />
               </label>
               <button type="button" onClick={startCamera}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <span className="text-lg">📷</span>
-                {preview ? "Retake with camera" : "Take a photo"}
+                {files.length ? "Add a page with camera" : "Take a photo"}
               </button>
             </>
           )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           {!cameraOn && (
-            <div className="flex justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
               <Button variant="ghost" onClick={skipToManual}>Skip — enter manually</Button>
-              <Button onClick={parse} disabled={!file || busy}>
-                {busy ? "Reading contract…" : "Parse contract"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {files.length > 0 && (
+                  <span className="text-xs text-slate-400">{files.length} page(s)</span>
+                )}
+                <Button onClick={parse} disabled={!files.length || busy}>
+                  {busy ? "Reading contract…" : "Parse contract"}
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -251,6 +282,9 @@ export default function ContractUpload({ building, units, onClose, onComplete })
         <form onSubmit={save} className="space-y-3">
           {notice && (
             <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">{notice}</p>
+          )}
+          {files.length > 0 && (
+            <p className="text-xs text-slate-400">{files.length} contract page(s) will be saved.</p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <TextInput label="Tenant name" value={form.tenant_name}

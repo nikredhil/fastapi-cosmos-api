@@ -24,7 +24,10 @@ class LeaseCreate(BaseModel):
     )
     terms: str | None = Field(default=None, max_length=8000)
     contract_image_id: str | None = Field(
-        default=None, description="Id of an uploaded contract image, if any"
+        default=None, description="Primary/first contract page (legacy single-image field)"
+    )
+    contract_image_ids: list[str] = Field(
+        default_factory=list, description="All uploaded contract pages, in order"
     )
     parsed: bool = Field(default=False, description="Was this lease prefilled from a parsed photo?")
 
@@ -41,6 +44,7 @@ class LeaseUpdate(BaseModel):
     rent_increase_pct: float | None = Field(default=None, ge=0, le=100)
     terms: str | None = Field(default=None, max_length=8000)
     contract_image_id: str | None = None
+    contract_image_ids: list[str] | None = None
     status: LeaseStatus | None = None
 
 
@@ -58,6 +62,7 @@ class Lease(BaseModel):
     rent_increase_pct: float | None = None
     terms: str | None = None
     contract_image_id: str | None = None
+    contract_image_ids: list[str] = Field(default_factory=list)
     parsed: bool = False
     status: LeaseStatus = LeaseStatus.ACTIVE
     created_at: datetime

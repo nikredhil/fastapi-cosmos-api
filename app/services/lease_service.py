@@ -43,6 +43,7 @@ class LeaseService:
             "rent_increase_pct": payload.rent_increase_pct,
             "terms": payload.terms,
             "contract_image_id": payload.contract_image_id,
+            "contract_image_ids": payload.contract_image_ids,
             "parsed": payload.parsed,
             "status": "active",
             "created_at": now.isoformat(),

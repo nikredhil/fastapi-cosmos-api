@@ -136,6 +136,123 @@ function PaymentModal({ buildingId, bill, onClose, onDone }) {
   );
 }
 
+// Per-tenant, per-month rent tracker: a grid the landlord ticks as rent comes in.
+function RentTracker({ buildingId }) {
+  const [tenants, setTenants] = useState([]);
+  const [billMap, setBillMap] = useState({}); // `${tenant_id}|${period}` -> bill
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [busyCell, setBusyCell] = useState(null);
+  // Oldest → newest left-to-right (recentPeriods is newest-first).
+  const months = useMemo(() => recentPeriods(6).slice().reverse(), []);
+
+  async function load() {
+    if (!buildingId) return;
+    setLoading(true);
+    try {
+      const [ts, rentBills] = await Promise.all([
+        api.listTenants(buildingId),
+        api.listBills(buildingId, { bill_type: "rent" }),
+      ]);
+      setTenants(ts.filter((t) => t.status === "active"));
+      const map = {};
+      for (const b of rentBills) map[`${b.tenant_id}|${b.period}`] = b;
+      setBillMap(map);
+      setError(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildingId]);
+
+  async function toggle(tenant, period) {
+    const key = `${tenant.id}|${period}`;
+    const bill = billMap[key];
+    const paid = bill?.status === "paid";
+    setBusyCell(key);
+    try {
+      await api.setRentStatus(buildingId, { tenant_id: tenant.id, period, paid: !paid });
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyCell(null);
+    }
+  }
+
+  if (loading) return <Spinner />;
+  if (tenants.length === 0) {
+    return (
+      <EmptyState icon={<CashIcon className="mx-auto h-8 w-8 text-slate-400" />}
+        title="No active tenants">
+        Add tenants to this building to track their monthly rent here.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <Card className="overflow-x-auto">
+      {error && <p className="px-4 pt-3 text-sm text-red-600">{error}</p>}
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500">
+            <th className="px-4 py-2 text-left font-medium">Tenant</th>
+            {months.map((m) => (
+              <th key={m.value} className="px-2 py-2 text-center font-medium">{m.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {tenants.map((t) => (
+            <tr key={t.id}>
+              <td className="px-4 py-2">
+                <p className="font-medium text-slate-800">{t.name}</p>
+              </td>
+              {months.map((m) => {
+                const key = `${t.id}|${m.value}`;
+                const bill = billMap[key];
+                const paid = bill?.status === "paid";
+                const partial = bill?.status === "partial";
+                const overdue = bill?.status === "overdue";
+                const cls = paid
+                  ? "bg-emerald-500 border-emerald-500 text-white"
+                  : partial
+                  ? "bg-amber-100 border-amber-300 text-amber-700"
+                  : overdue
+                  ? "bg-rose-50 border-rose-300 text-rose-500"
+                  : "bg-white border-slate-300 text-transparent hover:border-emerald-400";
+                return (
+                  <td key={m.value} className="px-2 py-2 text-center">
+                    <button
+                      type="button"
+                      disabled={busyCell === key}
+                      onClick={() => toggle(t, m.value)}
+                      title={paid ? "Rent paid — click to undo" : "Mark rent paid"}
+                      className={`mx-auto flex h-7 w-7 items-center justify-center rounded-md border text-sm font-bold transition ${cls} disabled:opacity-50`}
+                    >
+                      {paid ? "✓" : partial ? "½" : overdue ? "!" : "✓"}
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-4 py-3 text-xs text-slate-400">
+        Tick a cell when a tenant pays that month's rent. A green ✓ records a full rent payment;
+        click again to undo. Amber = partial, red = overdue.
+      </p>
+    </Card>
+  );
+}
+
 export default function Bills() {
   const [buildings, setBuildings] = useState([]);
   const [buildingId, setBuildingId] = useState("");
@@ -146,6 +263,7 @@ export default function Bills() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modal, setModal] = useState(null); // 'generate' | {type:'pay', bill}
+  const [view, setView] = useState("list"); // 'list' | 'tracker'
   const periods = useMemo(() => recentPeriods(12), []);
 
   useEffect(() => {
@@ -212,26 +330,43 @@ export default function Bills() {
         }
       />
 
+      <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-sm">
+        {[["list", "Bills"], ["tracker", "Rent tracker"]].map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)}
+            className={`rounded-md px-3 py-1.5 font-medium transition ${
+              view === v ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select label="Building" value={buildingId} onChange={(e) => setBuildingId(e.target.value)}>
           {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </Select>
-        <Select label="Month" value={period} onChange={(e) => setPeriod(e.target.value)}>
-          {periods.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-        </Select>
-        <Select label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-          <option value="">All types</option>
-          {BILL_TYPES.map((t) => <option key={t} value={t}>{BILL_TYPE_META[t].label}</option>)}
-        </Select>
-        <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          {BILL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </Select>
+        {view === "list" && (
+          <>
+            <Select label="Month" value={period} onChange={(e) => setPeriod(e.target.value)}>
+              {periods.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </Select>
+            <Select label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">All types</option>
+              {BILL_TYPES.map((t) => <option key={t} value={t}>{BILL_TYPE_META[t].label}</option>)}
+            </Select>
+            <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              {BILL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </Select>
+          </>
+        )}
       </div>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {view === "tracker" && buildingId && <RentTracker buildingId={buildingId} />}
 
-      {loading ? (
+      {view === "list" && error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+      {view === "list" && (loading ? (
         <Spinner />
       ) : bills.length === 0 ? (
         <EmptyState icon={<CashIcon className="mx-auto h-8 w-8 text-slate-400" />} title={`No bills for ${formatPeriod(period)}`}
@@ -287,7 +422,7 @@ export default function Bills() {
             })}
           </div>
         </Card>
-      )}
+      ))}
 
       {modal === "generate" && (
         <GenerateModal buildingId={buildingId} period={period}

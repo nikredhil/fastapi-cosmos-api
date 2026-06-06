@@ -53,6 +53,14 @@ class GenerateBillsRequest(BaseModel):
     maintenance_amount: int = Field(default=0, ge=0)
 
 
+class RentStatusRequest(BaseModel):
+    """Toggle whether a tenant's rent for a month is paid (rent tracker grid)."""
+
+    tenant_id: str
+    period: str = Field(description="Billing month, e.g. 2026-06", max_length=7)
+    paid: bool
+
+
 class Bill(BaseModel):
     id: str
     building_id: str = Field(description="Parent building (partition key)")
