@@ -10,6 +10,12 @@ from app.services.tenant_service import TenantService
 from app.services.unit_service import UnitService
 
 
+# Portfolio-wide lease terms: every lease renews after 11 months with a 5%
+# rent increase, unless a tenant has explicit values of their own.
+DEFAULT_LEASE_MONTHS = 11
+DEFAULT_INCREASE_PCT = 5.0
+
+
 def _current_period() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
 
@@ -70,15 +76,17 @@ class DashboardService:
             occupied_units += sum(1 for u in units if u.status.value == "occupied")
             active_tenants += sum(1 for t in tenants if t.status.value == "active")
 
-            # Rent-increase reminders: each lease renews after `lease_months`,
-            # at which point the rent steps up by `rent_increase_pct`.
+            # Rent-increase reminders: every lease renews after 11 months with a
+            # 5% increase by default (per-tenant overrides honored). Anchored on
+            # the tenant's move-in date.
             for t in tenants:
-                if t.status.value != "active" or not t.lease_months:
+                if t.status.value != "active":
                     continue
-                renewal = _add_months(t.move_in_date, t.lease_months)
+                months = t.lease_months or DEFAULT_LEASE_MONTHS
+                renewal = _add_months(t.move_in_date, months)
                 if renewal is None:
                     continue
-                pct = t.rent_increase_pct
+                pct = t.rent_increase_pct if t.rent_increase_pct is not None else DEFAULT_INCREASE_PCT
                 new_rent = (
                     round(t.monthly_rent * (1 + pct / 100)) if pct and t.monthly_rent else None
                 )
