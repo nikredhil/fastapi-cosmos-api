@@ -94,9 +94,9 @@ export default function ContractUpload({ building, units, onClose, onComplete })
     setBusy(true);
     setError(null);
     try {
-      // Parse the first page (it carries the key fields); all pages are stored on save.
-      const res = await api.parseContract(building.id, files[0]);
-      setImageIds([res.contract_image_id]);
+      // Send every page — Claude reads them together and stores them all.
+      const res = await api.parseContract(building.id, files);
+      setImageIds(res.contract_image_ids || (res.contract_image_id ? [res.contract_image_id] : []));
       setForm({
         tenant_name: res.tenant_name || "",
         tenant_age: res.tenant_age ?? "",

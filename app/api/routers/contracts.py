@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.dependencies import get_building_service, get_image_store
 from app.core.security import get_current_user
 from app.services.building_service import BuildingNotFoundError, BuildingService
-from app.services.contract_parser import is_enabled, parse_contract_image
+from app.services.contract_parser import is_enabled, parse_contract_images
 
 router = APIRouter(prefix="/buildings/{building_id}/contracts", tags=["contracts"])
 
@@ -70,19 +70,33 @@ async def upload_image(
 @router.post("/parse", status_code=status.HTTP_201_CREATED)
 async def upload_and_parse(
     building_id: str,
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     user: str = Depends(get_current_user),
     buildings: BuildingService = Depends(get_building_service),
     store=Depends(get_image_store),
 ) -> dict:
+    """Store every page of an agreement and parse them together into fields."""
     await _assert_building(buildings, user, building_id)
-    data, media_type = await _read_valid_image(file)
-    image_id = uuid.uuid4().hex
-    await store.save(image_id, data, media_type)
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded.")
+
+    image_ids: list[str] = []
+    images: list[tuple[bytes, str]] = []
+    for file in files:
+        data, media_type = await _read_valid_image(file)
+        image_id = uuid.uuid4().hex
+        await store.save(image_id, data, media_type)
+        image_ids.append(image_id)
+        images.append((data, media_type))
 
     settings = get_settings()
-    parsed = await run_in_threadpool(parse_contract_image, data, media_type, settings)
-    return {"contract_image_id": image_id, "enabled": is_enabled(settings), **parsed}
+    parsed = await run_in_threadpool(parse_contract_images, images, settings)
+    return {
+        "contract_image_id": image_ids[0],
+        "contract_image_ids": image_ids,
+        "enabled": is_enabled(settings),
+        **parsed,
+    }
 
 
 @router.get("/{image_id}")

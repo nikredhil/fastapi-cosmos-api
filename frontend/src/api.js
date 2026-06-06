@@ -31,6 +31,19 @@ async function upload(path, file) {
   return res.json();
 }
 
+// multipart upload of several files under the "files" field
+async function uploadFiles(path, files) {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await getToken()}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 const qs = (params) => {
   const q = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => {
@@ -98,7 +111,7 @@ export const api = {
     request(`/buildings/${bid}/bills/rent-status`, { method: "POST", body }),
 
   // --- contracts / documents ---
-  parseContract: (bid, file) => upload(`/buildings/${bid}/contracts/parse`, file),
+  parseContract: (bid, files) => uploadFiles(`/buildings/${bid}/contracts/parse`, files),
   uploadImage: (bid, file) => upload(`/buildings/${bid}/contracts/upload`, file),
   contractImageUrl: (bid, imageId) => `${BASE}/buildings/${bid}/contracts/${imageId}`,
 

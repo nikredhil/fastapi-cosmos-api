@@ -75,7 +75,9 @@ _FIELDS = list(CONTRACT_SCHEMA["properties"].keys())
 
 _PROMPT = (
     "You are reading a scanned/photographed residential rental agreement from India. "
-    "Extract the fields and call the record_contract tool exactly once. "
+    "The images are the pages of ONE agreement, in order — read ALL of them, since details "
+    "(tenant name, age, permanent address, rent, deposit, term, increase %) are often spread "
+    "across different pages. Extract the fields and call the record_contract tool exactly once. "
     "Convert any rent/deposit amounts to plain integers in INR (drop ₹, commas, and the word "
     "'rupees'). Use ISO dates (YYYY-MM-DD). For lease_months give the duration in months as an "
     "integer (e.g. '11 (ELEVEN) MONTHS' -> 11). For rent_increase_pct give the renewal increase "
@@ -119,47 +121,54 @@ def _empty() -> dict[str, Any]:
 def parse_contract_image(
     image_bytes: bytes, media_type: str, settings: Settings | None = None
 ) -> dict[str, Any]:
+    """Parse a single contract image. Thin wrapper over :func:`parse_contract_images`."""
+    return parse_contract_images([(image_bytes, media_type)], settings)
+
+
+def parse_contract_images(
+    images: list[tuple[bytes, str]], settings: Settings | None = None
+) -> dict[str, Any]:
     """Return a dict of extracted fields plus a ``parsed`` flag.
 
-    Never raises — on any error (no key, transport failure) it returns empty
-    fields with ``parsed=False`` so the caller can fall back to manual entry.
+    Accepts every page of one agreement (in order) and reads them together so
+    fields spread across pages are all captured. Never raises — on any error
+    (no key, transport failure) it returns empty fields with ``parsed=False``
+    so the caller can fall back to manual entry.
     """
     settings = settings or get_settings()
     if not settings.anthropic_api_key:
         return {**_empty(), "parsed": False, "error": "Contract parsing is not configured."}
+    if not images:
+        return {**_empty(), "parsed": False, "error": "No images to parse."}
 
     try:
         from anthropic import Anthropic  # imported lazily so the app boots without the SDK
 
         client = Anthropic(api_key=settings.anthropic_api_key)
-        data = base64.standard_b64encode(image_bytes).decode("ascii")
+        content: list[dict[str, Any]] = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.standard_b64encode(data).decode("ascii"),
+                },
+            }
+            for data, media_type in images
+        ]
+        content.append({"type": "text", "text": _PROMPT})
         message = client.messages.create(
             model=settings.anthropic_model,
             max_tokens=1024,
             tools=[
                 {
                     "name": "record_contract",
-                    "description": "Record the rental-contract fields extracted from the image.",
+                    "description": "Record the rental-contract fields extracted from the pages.",
                     "input_schema": CONTRACT_SCHEMA,
                 }
             ],
             tool_choice={"type": "tool", "name": "record_contract"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": data,
-                            },
-                        },
-                        {"type": "text", "text": _PROMPT},
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": content}],
         )
     except Exception as exc:  # noqa: BLE001 - degrade gracefully to manual entry
         return {**_empty(), "parsed": False, "error": str(exc)}
@@ -184,4 +193,4 @@ def parse_contract_image(
     return result
 
 
-__all__ = ["parse_contract_image", "is_enabled", "CONTRACT_SCHEMA"]
+__all__ = ["parse_contract_image", "parse_contract_images", "is_enabled", "CONTRACT_SCHEMA"]
