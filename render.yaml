@@ -17,15 +17,21 @@ services:
         value: 3.12.8
       - key: ENVIRONMENT
         value: prod
-      # Storage. The free plan has an EPHEMERAL filesystem — data resets on every
-      # restart/deploy. For real persistence either:
-      #   (a) upgrade to a paid instance and uncomment the `disk:` block below, or
-      #   (b) use Cosmos: set DB_BACKEND=cosmos and the COSMOS_* vars (sync:false).
+      # Persistent storage via Azure Cosmos DB. The endpoint + key are secrets,
+      # so they're set in the Render dashboard (sync:false), not committed here.
       - key: DB_BACKEND
-        value: file
-      # Writable path inside the project dir (works on the free plan, but is
-      # EPHEMERAL — resets on restart). With a persistent disk, change these to
-      # the disk's mountPath (e.g. /var/data and /var/data/uploads).
+        value: cosmos
+      - key: COSMOS_DATABASE
+        value: rentwise
+      # Shared throughput so all containers share one 1000 RU/s pool — free on a
+      # Free-Tier Cosmos account.
+      - key: COSMOS_SHARED_THROUGHPUT
+        value: "1000"
+      - key: COSMOS_ENDPOINT
+        sync: false
+      - key: COSMOS_KEY
+        sync: false
+      # Uploaded images still use the (ephemeral) local disk on the free plan.
       - key: DATA_DIR
         value: ./data
       - key: UPLOADS_DIR
@@ -41,13 +47,6 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-opus-4-8
-      # --- Cosmos DB (only if DB_BACKEND=cosmos) — set these in the dashboard ---
-      # - key: COSMOS_ENDPOINT
-      #   sync: false
-      # - key: COSMOS_KEY
-      #   sync: false
-      # - key: COSMOS_DATABASE
-      #   value: rentwise
 
     # Persistent disk (paid plans only). Uncomment to keep file-backend data and
     # uploaded images across restarts; DATA_DIR/UPLOADS_DIR above point at it.
