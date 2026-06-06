@@ -24,11 +24,23 @@ class CosmosConnection:
             raise ValueError("COSMOS_ENDPOINT and COSMOS_KEY are required for the cosmos backend")
         self._client = CosmosClient(settings.cosmos_endpoint, credential=settings.cosmos_key)
         self._database_name = settings.cosmos_database
+        self._shared_throughput = settings.cosmos_shared_throughput
         self._database: DatabaseProxy | None = None
 
     async def connect(self) -> None:
-        self._database = await self._client.create_database_if_not_exists(self._database_name)
-        logger.info("cosmos_connected", database=self._database_name)
+        # With a shared throughput, all containers share one RU/s pool — set it to
+        # 1000 on a Free-Tier account to stay free. Omit it for Serverless.
+        kwargs: dict[str, Any] = {}
+        if self._shared_throughput:
+            kwargs["offer_throughput"] = self._shared_throughput
+        self._database = await self._client.create_database_if_not_exists(
+            self._database_name, **kwargs
+        )
+        logger.info(
+            "cosmos_connected",
+            database=self._database_name,
+            shared_throughput=self._shared_throughput,
+        )
 
     async def get_container(self, name: str, partition_key_field: str) -> ContainerProxy:
         assert self._database is not None, "connect() must be called first"

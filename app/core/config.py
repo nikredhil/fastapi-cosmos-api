@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     cosmos_endpoint: str | None = None
     cosmos_key: str | None = None
     cosmos_database: str = "rentwise"
+    # When set, create the Cosmos database with this shared throughput (RU/s) so
+    # all containers share one pool. Use 1000 on an account with the Free Tier
+    # discount applied to stay $0. Leave unset for Serverless accounts.
+    cosmos_shared_throughput: int | None = None
 
     # Microsoft Entra ID (Azure AD) sign-in. The SPA authenticates with Microsoft
     # via MSAL and sends an ID token; the API validates it against Microsoft's
