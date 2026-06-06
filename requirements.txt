@@ -3,6 +3,7 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
 azure-cosmos==4.9.0
+aiohttp==3.11.11  # async HTTP transport required by azure-cosmos.aio
 python-jose[cryptography]==3.3.0
 bcrypt==5.0.0
 structlog==24.4.0
