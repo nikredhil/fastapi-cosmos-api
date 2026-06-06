@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Azure Cosmos DB (only required when db_backend == "cosmos").
     cosmos_endpoint: str | None = None
     cosmos_key: str | None = None
-    cosmos_database: str = "tasktracker"
+    cosmos_database: str = "rentwise"
 
     # Microsoft Entra ID (Azure AD) sign-in. The SPA authenticates with Microsoft
     # via MSAL and sends an ID token; the API validates it against Microsoft's
