@@ -13,6 +13,7 @@ from app.models.schemas.bill import (
     GenerateBillsRequest,
     PaymentCreate,
     RentStatusRequest,
+    RentSyncRequest,
 )
 from app.models.schemas.common import Page
 from app.services.bill_service import BillNotFoundError, BillService
@@ -102,6 +103,26 @@ async def set_rent_status(
         )
     except BuildingNotFoundError:
         raise _building_404()
+
+
+@router.post("/sync-rent")
+async def sync_rent(
+    building_id: str,
+    payload: RentSyncRequest,
+    user: str = Depends(get_current_user),
+    service: BillService = Depends(get_bill_service),
+) -> dict:
+    """Re-price a tenant's open rent bills to a new monthly rent."""
+    try:
+        updated = await service.sync_tenant_rent(
+            owner=user,
+            building_id=building_id,
+            tenant_id=payload.tenant_id,
+            monthly_rent=payload.monthly_rent,
+        )
+    except BuildingNotFoundError:
+        raise _building_404()
+    return {"updated": updated}
 
 
 @router.patch("/{bill_id}", response_model=Bill)

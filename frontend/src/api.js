@@ -109,6 +109,8 @@ export const api = {
     request(`/buildings/${bid}/bills/${id}/payments`, { method: "POST", body }),
   setRentStatus: (bid, body) =>
     request(`/buildings/${bid}/bills/rent-status`, { method: "POST", body }),
+  syncRent: (bid, body) =>
+    request(`/buildings/${bid}/bills/sync-rent`, { method: "POST", body }),
 
   // --- contracts / documents ---
   parseContract: (bid, files) => uploadFiles(`/buildings/${bid}/contracts/parse`, files),

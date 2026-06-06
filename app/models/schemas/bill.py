@@ -61,6 +61,13 @@ class RentStatusRequest(BaseModel):
     paid: bool
 
 
+class RentSyncRequest(BaseModel):
+    """Re-price a tenant's open rent bills after a rent change."""
+
+    tenant_id: str
+    monthly_rent: int = Field(ge=0, description="New monthly rent in INR")
+
+
 class Bill(BaseModel):
     id: str
     building_id: str = Field(description="Parent building (partition key)")

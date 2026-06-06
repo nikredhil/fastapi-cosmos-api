@@ -267,6 +267,38 @@ class BillService:
         updated = await self._repo.update(doc)
         return self._to_model(updated)
 
+    async def sync_tenant_rent(
+        self, owner: str, building_id: str, tenant_id: str, monthly_rent: int
+    ) -> int:
+        """Re-price a tenant's not-yet-paid rent bills after a rent change.
+
+        Updates unpaid/partial/overdue rent bills to ``monthly_rent`` so the
+        Rent & Bills tab reflects the new amount. Fully-paid bills are left
+        untouched as a historical record. Returns the number of bills changed.
+        """
+        await self._assert_building(owner, building_id)
+        if monthly_rent <= 0:
+            return 0
+        docs = await self._repo.list_for_building(
+            building_id, bill_type="rent", tenant_id=tenant_id, limit=2000, offset=0
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        changed = 0
+        for doc in docs:
+            paid = sum(p.get("amount", 0) for p in doc.get("payments", []))
+            amount = int(doc.get("amount", 0))
+            if amount > 0 and paid >= amount:
+                continue  # fully paid — keep as-is
+            if amount == monthly_rent:
+                continue  # already current
+            doc["amount"] = monthly_rent
+            doc["paid_amount"] = paid
+            doc["status"] = _status_for(monthly_rent, paid, doc.get("due_date"))
+            doc["updated_at"] = now
+            await self._repo.update(doc)
+            changed += 1
+        return changed
+
     async def delete(self, owner: str, building_id: str, bill_id: str) -> None:
         await self._assert_building(owner, building_id)
         deleted = await self._repo.delete(bill_id, building_id)

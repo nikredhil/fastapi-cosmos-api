@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, rupees } from "../api";
 import {
@@ -102,6 +102,7 @@ function EditTenantModal({ row, onClose, onDone }) {
     if (!form.name.trim()) return;
     setBusy(true);
     try {
+      const rent = Number(form.monthly_rent) || 0;
       await api.updateTenant(tenant.building_id, tenant.id, {
         name: form.name.trim(),
         phone: form.phone || null,
@@ -109,9 +110,13 @@ function EditTenantModal({ row, onClose, onDone }) {
         email: form.email || null,
         unit_id: form.unit_id || null,
         deposit: Number(form.deposit) || 0,
-        monthly_rent: Number(form.monthly_rent) || 0,
+        monthly_rent: rent,
         status: form.status,
       });
+      // Re-price the tenant's open rent bills so Rent & Bills reflects the change.
+      if (rent > 0) {
+        await api.syncRent(tenant.building_id, { tenant_id: tenant.id, monthly_rent: rent });
+      }
       onDone();
       onClose();
     } catch (err) {
@@ -212,10 +217,14 @@ export default function Tenants() {
       (r.buildingName || "").toLowerCase().includes(query.toLowerCase())
     )
     .sort((a, b) => {
-      const d = unitSortKey(a.unitLabel) - unitSortKey(b.unitLabel);
-      if (d !== 0) return d;
-      return (a.buildingName || "").localeCompare(b.buildingName || "") ||
-        a.tenant.name.localeCompare(b.tenant.name);
+      // Group by building, then ascending by flat number within each building.
+      const bd = (a.buildingName || "").localeCompare(b.buildingName || "", undefined, {
+        numeric: true,
+      });
+      if (bd !== 0) return bd;
+      const ud = unitSortKey(a.unitLabel) - unitSortKey(b.unitLabel);
+      if (ud !== 0) return ud;
+      return a.tenant.name.localeCompare(b.tenant.name);
     });
 
   return (
@@ -248,10 +257,17 @@ export default function Tenants() {
           <TextInput placeholder="Search tenants or buildings…" value={query}
             onChange={(e) => setQuery(e.target.value)} />
           <Card className="mt-4 divide-y divide-slate-100">
-            {filtered.map((row) => {
+            {filtered.map((row, idx) => {
               const { tenant, buildingName, buildingId, unitLabel } = row;
+              const showHeader = idx === 0 || filtered[idx - 1].buildingId !== buildingId;
               return (
-                <div key={tenant.id} className="flex items-center gap-3 px-4 py-3">
+                <Fragment key={tenant.id}>
+                {showHeader && (
+                  <div className="bg-slate-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {buildingName}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 px-4 py-3">
                   <Avatar name={tenant.name} color={tenant.avatar_color} />
                   <div className="min-w-0 flex-1">
                     <Link to={`/buildings/${buildingId}/tenants/${tenant.id}`}
@@ -273,6 +289,7 @@ export default function Tenants() {
                     Edit
                   </Button>
                 </div>
+                </Fragment>
               );
             })}
             {filtered.length === 0 && (
