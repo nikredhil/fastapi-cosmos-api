@@ -16,7 +16,7 @@ function Brand() {
         <HomeIcon className="h-5 w-5 text-blue-600" />
       </span>
       <div>
-        <h1 className="text-lg font-bold leading-none text-slate-800">RentWise</h1>
+        <h1 className="text-lg font-bold leading-none text-slate-800">WiseRent</h1>
         <p className="text-[11px] text-slate-400">Rental manager</p>
       </div>
     </div>
@@ -106,7 +106,7 @@ export default function Layout({ username, onLogout }) {
             </svg>
           </button>
           <span className="flex items-center gap-2 font-bold text-slate-800">
-            <HomeIcon className="h-5 w-5 text-blue-600" /> RentWise
+            <HomeIcon className="h-5 w-5 text-blue-600" /> WiseRent
           </span>
         </header>
 

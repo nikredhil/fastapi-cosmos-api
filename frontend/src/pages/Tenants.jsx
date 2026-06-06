@@ -7,6 +7,13 @@ import {
 import Avatar from "../components/Avatar";
 import { TenantsIcon, UserIcon } from "../components/icons";
 
+// Sort key from a unit/flat label: leading digits ascending, blanks last.
+function unitSortKey(label) {
+  if (!label) return Number.POSITIVE_INFINITY;
+  const n = parseInt(String(label).replace(/[^0-9]/g, ""), 10);
+  return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n;
+}
+
 function AddTenantModal({ buildings, onClose, onDone }) {
   const [form, setForm] = useState({
     building_id: buildings[0]?.id || "", name: "", phone: "", email: "", unit_id: "", deposit: "",
@@ -73,9 +80,11 @@ function EditTenantModal({ row, onClose, onDone }) {
   const [form, setForm] = useState({
     name: tenant.name || "",
     phone: tenant.phone || "",
+    emergency_phone: tenant.emergency_phone || "",
     email: tenant.email || "",
     unit_id: tenant.unit_id || "",
     deposit: tenant.deposit ?? "",
+    monthly_rent: tenant.monthly_rent ?? "",
     status: tenant.status || "active",
   });
   const [units, setUnits] = useState([]);
@@ -96,9 +105,11 @@ function EditTenantModal({ row, onClose, onDone }) {
       await api.updateTenant(tenant.building_id, tenant.id, {
         name: form.name.trim(),
         phone: form.phone || null,
+        emergency_phone: form.emergency_phone || null,
         email: form.email || null,
         unit_id: form.unit_id || null,
         deposit: Number(form.deposit) || 0,
+        monthly_rent: Number(form.monthly_rent) || 0,
         status: form.status,
       });
       onDone();
@@ -128,19 +139,23 @@ function EditTenantModal({ row, onClose, onDone }) {
         <TextInput label="Name" value={form.name} onChange={set("name")} autoFocus />
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Phone" value={form.phone} onChange={set("phone")} />
-          <TextInput label="Email" value={form.email} onChange={set("email")} />
+          <TextInput label="Emergency phone" value={form.emergency_phone}
+            onChange={set("emergency_phone")} />
         </div>
+        <TextInput label="Email" value={form.email} onChange={set("email")} />
         <Select label="Unit" value={form.unit_id} onChange={set("unit_id")}>
           <option value="">— Unassigned —</option>
           {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
         </Select>
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Deposit (₹)" value={form.deposit} onChange={set("deposit")} />
-          <Select label="Status" value={form.status} onChange={set("status")}>
-            <option value="active">Active</option>
-            <option value="past">Past</option>
-          </Select>
+          <NumberInput label="Monthly rent (₹)" value={form.monthly_rent}
+            onChange={set("monthly_rent")} />
         </div>
+        <Select label="Status" value={form.status} onChange={set("status")}>
+          <option value="active">Active</option>
+          <option value="past">Past</option>
+        </Select>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex items-center justify-between pt-2">
           <Button type="button" variant="danger" onClick={remove} disabled={deleting}>
@@ -191,10 +206,17 @@ export default function Tenants() {
     load();
   }, []);
 
-  const filtered = rows.filter((r) =>
-    r.tenant.name.toLowerCase().includes(query.toLowerCase()) ||
-    (r.buildingName || "").toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = rows
+    .filter((r) =>
+      r.tenant.name.toLowerCase().includes(query.toLowerCase()) ||
+      (r.buildingName || "").toLowerCase().includes(query.toLowerCase())
+    )
+    .sort((a, b) => {
+      const d = unitSortKey(a.unitLabel) - unitSortKey(b.unitLabel);
+      if (d !== 0) return d;
+      return (a.buildingName || "").localeCompare(b.buildingName || "") ||
+        a.tenant.name.localeCompare(b.tenant.name);
+    });
 
   return (
     <div>

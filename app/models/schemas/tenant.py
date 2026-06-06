@@ -12,6 +12,9 @@ class TenantCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     age: int | None = Field(default=None, ge=0, le=120, description="Tenant age in years")
     phone: str | None = Field(default=None, max_length=30)
+    emergency_phone: str | None = Field(
+        default=None, max_length=30, description="Emergency contact number"
+    )
     email: str | None = Field(default=None, max_length=200)
     permanent_address: str | None = Field(
         default=None, max_length=500, description="Tenant's permanent/home address"
@@ -33,6 +36,7 @@ class TenantUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     age: int | None = Field(default=None, ge=0, le=120)
     phone: str | None = Field(default=None, max_length=30)
+    emergency_phone: str | None = Field(default=None, max_length=30)
     email: str | None = Field(default=None, max_length=200)
     permanent_address: str | None = Field(default=None, max_length=500)
     unit_id: str | None = None
@@ -43,7 +47,10 @@ class TenantUpdate(BaseModel):
     rent_increase_pct: float | None = Field(default=None, ge=0, le=100)
     status: TenantStatus | None = None
     avatar_color: str | None = None
-    aadhaar_image_id: str | None = Field(default=None, description="Uploaded Aadhaar card image id")
+    aadhaar_image_id: str | None = Field(default=None, description="Primary Aadhaar image (legacy)")
+    aadhaar_image_ids: list[str] | None = Field(
+        default=None, description="All uploaded Aadhaar card pages"
+    )
 
 
 class Tenant(BaseModel):
@@ -52,6 +59,7 @@ class Tenant(BaseModel):
     name: str
     age: int | None = None
     phone: str | None = None
+    emergency_phone: str | None = None
     email: str | None = None
     permanent_address: str | None = None
     unit_id: str | None = None
@@ -63,5 +71,6 @@ class Tenant(BaseModel):
     status: TenantStatus = TenantStatus.ACTIVE
     avatar_color: str | None = None
     aadhaar_image_id: str | None = None
+    aadhaar_image_ids: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

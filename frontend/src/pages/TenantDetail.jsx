@@ -61,12 +61,28 @@ export default function TenantDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingId, tenantId]);
 
-  async function uploadAadhaar(file) {
-    if (!file) return;
+  // Aadhaar pages on a tenant, tolerating the legacy single-image field.
+  function aadhaarPages(t) {
+    if (t.aadhaar_image_ids?.length) return t.aadhaar_image_ids;
+    return t.aadhaar_image_id ? [t.aadhaar_image_id] : [];
+  }
+
+  async function uploadAadhaar(fileInput) {
+    const list = fileInput instanceof File ? [fileInput] : Array.from(fileInput || []);
+    if (!list.length) return;
     setUploading(true);
     try {
-      const { image_id } = await api.uploadImage(buildingId, file);
-      await api.updateTenant(buildingId, tenantId, { aadhaar_image_id: image_id });
+      const existing = aadhaarPages(tenant);
+      const added = [];
+      for (const f of list) {
+        const { image_id } = await api.uploadImage(buildingId, f);
+        added.push(image_id);
+      }
+      const all = [...existing, ...added];
+      await api.updateTenant(buildingId, tenantId, {
+        aadhaar_image_ids: all,
+        aadhaar_image_id: all[0],
+      });
       await load();
     } catch (e) {
       setError(e.message);
@@ -133,10 +149,14 @@ export default function TenantDetail() {
             <p className="text-sm text-slate-500">
               {[tenant.phone, tenant.email].filter(Boolean).join(" · ") || "No contact info"}
             </p>
+            {tenant.emergency_phone && (
+              <p className="text-xs text-slate-400">Emergency: {tenant.emergency_phone}</p>
+            )}
           </div>
         </div>
-        <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
           <Detail label="Unit" value={unitLabel(tenant.unit_id)} />
+          <Detail label="Rent" value={tenant.monthly_rent ? `${rupees(tenant.monthly_rent)}/mo` : "—"} />
           <Detail label="Move-in date" value={tenant.move_in_date} />
           <Detail label="Deposit paid" value={tenant.deposit ? rupees(tenant.deposit) : "—"} />
           <Detail label="Outstanding" value={rupees(billed - collected)} />
@@ -269,42 +289,54 @@ export default function TenantDetail() {
               Aadhaar card
             </h2>
             <Card className="p-4">
-              {tenant.aadhaar_image_id ? (
-                <button
-                  onClick={() => setLightbox({
-                    url: api.contractImageUrl(buildingId, tenant.aadhaar_image_id),
-                    alt: "Aadhaar card",
-                  })}
-                  title="Click to expand"
-                  className="group block w-full overflow-hidden rounded-lg border border-slate-200"
-                >
-                  <AuthImage
-                    url={api.contractImageUrl(buildingId, tenant.aadhaar_image_id)}
-                    alt="Aadhaar card"
-                    className="h-40 w-full object-cover transition group-hover:scale-105"
-                  />
-                </button>
+              {aadhaarPages(tenant).length > 0 ? (
+                <>
+                  <p className="mb-1 text-xs font-medium text-slate-400">
+                    {aadhaarPages(tenant).length} page(s)
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {aadhaarPages(tenant).map((imgId, i) => (
+                      <button key={imgId}
+                        onClick={() => setLightbox({
+                          url: api.contractImageUrl(buildingId, imgId),
+                          alt: `Aadhaar page ${i + 1}`,
+                        })}
+                        title={`Page ${i + 1} — click to expand`}
+                        className="group relative block overflow-hidden rounded-lg border border-slate-200"
+                      >
+                        <AuthImage
+                          url={api.contractImageUrl(buildingId, imgId)}
+                          alt={`Aadhaar page ${i + 1}`}
+                          className="h-24 w-full object-cover transition group-hover:scale-105"
+                        />
+                        <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
+                          {i + 1}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="flex flex-col items-center gap-1 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
                   <DocumentIcon className="h-7 w-7 text-slate-400" />
                   <span className="text-sm font-medium text-slate-600">
                     {uploading ? "Uploading…" : "No Aadhaar on file"}
                   </span>
-                  <span className="text-xs text-slate-400">Upload or capture an image</span>
+                  <span className="text-xs text-slate-400">Upload or capture image(s)</span>
                 </div>
               )}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button variant="secondary" onClick={() => fileRef.current?.click()}
                   disabled={uploading}>
                   <DocumentIcon className="h-4 w-4" />
-                  {tenant.aadhaar_image_id ? "Replace" : "Upload"}
+                  {aadhaarPages(tenant).length ? "Add pages" : "Upload"}
                 </Button>
                 <Button variant="secondary" onClick={() => setShowCamera(true)} disabled={uploading}>
                   <CameraIcon className="h-4 w-4" /> Camera
                 </Button>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                onChange={(e) => uploadAadhaar(e.target.files?.[0])} />
+              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+                onChange={(e) => uploadAadhaar(e.target.files)} />
             </Card>
           </div>
         </div>

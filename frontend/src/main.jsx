@@ -11,7 +11,7 @@ function Notice({ title, detail }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl ring-1 ring-slate-200">
-        <h1 className="text-xl font-bold text-slate-800">🏠 RentWise</h1>
+        <h1 className="text-xl font-bold text-slate-800">🏠 WiseRent</h1>
         <p className="mt-3 text-sm text-slate-600">{title}</p>
         {detail && <p className="mt-2 text-xs text-slate-400">{detail}</p>}
       </div>

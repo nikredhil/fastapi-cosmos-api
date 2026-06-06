@@ -71,7 +71,7 @@ export default function Login({ onLocalAuthed }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
-        <h1 className="text-2xl font-bold text-slate-800">🏠 RentWise</h1>
+        <h1 className="text-2xl font-bold text-slate-800">🏠 WiseRent</h1>
         <p className="mt-1 text-sm text-slate-500">
           {isRegister
             ? "Create your landlord account to get started."

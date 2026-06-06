@@ -43,6 +43,7 @@ class TenantService:
             "name": payload.name,
             "age": payload.age,
             "phone": payload.phone,
+            "emergency_phone": payload.emergency_phone,
             "email": payload.email,
             "permanent_address": payload.permanent_address,
             "unit_id": payload.unit_id,

@@ -220,6 +220,15 @@ class BillService:
                 ),
                 None,
             )
+            # Prefer the tenant's current (possibly overridden) rent; fall back
+            # to the lease amount. Works even for tenants without a lease.
+            tenant_rent = 0
+            try:
+                tenant_rent = (await self._tenants.get(owner, building_id, tenant_id)).monthly_rent
+            except Exception:  # noqa: BLE001 - tolerate a missing tenant
+                pass
+            amount = tenant_rent or (lease.monthly_rent if lease else 0)
+            due_day = lease.rent_due_day if lease else 5
             bill = await self.create(
                 owner,
                 building_id,
@@ -228,8 +237,8 @@ class BillService:
                     tenant_id=tenant_id,
                     bill_type=BillType.RENT,
                     period=period,
-                    amount=lease.monthly_rent if lease else 0,
-                    due_date=_due_date_for(period, lease.rent_due_day) if lease else None,
+                    amount=amount,
+                    due_date=_due_date_for(period, due_day),
                 ),
             )
             doc = await self._repo.get(bill.id, building_id)
@@ -291,11 +300,16 @@ class BillService:
 
         created: list[Bill] = []
         leases = await self._leases.list(owner, building_id, limit=1000, offset=0)
+        # The landlord can override the contract rent per tenant; bills follow
+        # that effective rent, falling back to the lease's original amount.
+        tenants = await self._tenants.list(owner, building_id, limit=1000, offset=0)
+        rent_override = {t.id: t.monthly_rent for t in tenants if t.monthly_rent}
         for lease in leases:
             if lease.status.value != "active":
                 continue
             due = _due_date_for(payload.period, lease.rent_due_day)
-            charges: list[tuple[str, int, str | None]] = [("rent", lease.monthly_rent, due)]
+            rent = rent_override.get(lease.tenant_id) or lease.monthly_rent
+            charges: list[tuple[str, int, str | None]] = [("rent", rent, due)]
             for bill_type, amount in extras:
                 charges.append((bill_type, amount, due))
             for bill_type, amount, due_date in charges:

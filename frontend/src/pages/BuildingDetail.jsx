@@ -142,6 +142,50 @@ function AddTenantModal({ buildingId, units, onClose, onDone }) {
   );
 }
 
+// Guard against accidental deletion: the landlord must type the building's
+// exact name, and we spell out what data goes with it.
+function DeleteBuildingModal({ building, unitCount, tenantCount, onClose, onConfirm }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const match = text.trim() === building.name.trim();
+
+  async function confirm() {
+    if (!match) return;
+    setBusy(true);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Delete building" subtitle={building.name} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          This permanently deletes <strong>{building.name}</strong> along with its{" "}
+          <strong>{unitCount} unit(s)</strong> and <strong>{tenantCount} tenant(s)</strong>,
+          plus their leases and bills. This cannot be undone.
+        </div>
+        <label className="block text-sm font-medium text-slate-700">
+          Type <span className="font-mono text-slate-900">{building.name}</span> to confirm
+          <TextInput value={text} onChange={(e) => setText(e.target.value)}
+            placeholder={building.name} autoFocus />
+        </label>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="danger" onClick={confirm} disabled={!match || busy}>
+            {busy ? "Deleting…" : "Delete building"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function BuildingDetail() {
   const { buildingId } = useParams();
   const navigate = useNavigate();
@@ -176,7 +220,6 @@ export default function BuildingDetail() {
   }, [buildingId]);
 
   async function removeBuilding() {
-    if (!confirm("Delete this building? Units, tenants, and bills under it remain in storage.")) return;
     await api.deleteBuilding(buildingId);
     navigate("/buildings");
   }
@@ -205,7 +248,7 @@ export default function BuildingDetail() {
           </Button>
           <Button variant="secondary" onClick={() => setModal({ type: "tenant" })}>+ Tenant</Button>
           <Button variant="secondary" onClick={() => setModal({ type: "unit" })}>+ Unit</Button>
-          <Button variant="danger" onClick={removeBuilding}>Delete</Button>
+          <Button variant="danger" onClick={() => setModal({ type: "delete" })}>Delete</Button>
         </div>
       </div>
 
@@ -292,6 +335,11 @@ export default function BuildingDetail() {
       {modal?.type === "contract" && (
         <ContractUpload building={building} units={units}
           onClose={() => setModal(null)} onComplete={load} />
+      )}
+      {modal?.type === "delete" && (
+        <DeleteBuildingModal building={building} unitCount={units.length}
+          tenantCount={tenants.length} onClose={() => setModal(null)}
+          onConfirm={removeBuilding} />
       )}
     </div>
   );
