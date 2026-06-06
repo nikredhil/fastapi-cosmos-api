@@ -150,10 +150,22 @@ def handle(client: SupportsApi, message: str) -> str:
     )
     if m:
         who = m.group(1).strip().strip("\"'?.").lower()
+        who_digits = re.sub(r"\D", "", who)
         for b in client.list_buildings():
             units = {u["id"]: u.get("label") for u in client.list_units(b["id"])}
             for t in client.list_tenants(b["id"]):
-                if who in t["name"].lower():
+                name = t.get("name", "").lower()
+                phone_digits = re.sub(r"\D", "", t.get("phone") or "")
+                email = (t.get("email") or "").lower()
+                if (
+                    who in name
+                    or (
+                        len(who_digits) >= 4
+                        and phone_digits
+                        and (who_digits in phone_digits or phone_digits in who_digits)
+                    )
+                    or (who in email and email)
+                ):
                     unit = units.get(t.get("unit_id"))
                     bills = client.list_bills(b["id"], status=None)
                     owed = sum(
@@ -173,7 +185,7 @@ def handle(client: SupportsApi, message: str) -> str:
                     if owed > 0:
                         line += f" Outstanding: {_rupees(owed)}."
                     return line
-        return f"I couldn't find a tenant named '{m.group(1).strip()}'."
+        return f"I couldn't find a tenant matching '{m.group(1).strip()}'."
 
     # --- tenants in a specific building ---
     m = re.search(r"tenants?\s+(?:in|at|for|of)\s+(.+)$", text, re.IGNORECASE)
