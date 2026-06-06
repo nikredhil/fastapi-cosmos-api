@@ -14,15 +14,20 @@ class Health(BaseModel):
     app: str
     environment: str
     db_backend: str
+    image_backend: str
 
 
 @router.get("/health", response_model=Health)
 async def health(settings: Settings = Depends(get_settings)) -> Health:
+    # "blob" once an Azure Storage connection string is configured (images
+    # persist); "disk" otherwise (ephemeral on Render's free plan).
+    image_backend = "blob" if settings.azure_storage_connection_string else "disk"
     return Health(
         status="ok",
         app=settings.app_name,
         environment=settings.environment,
         db_backend=settings.db_backend,
+        image_backend=image_backend,
     )
 
 
