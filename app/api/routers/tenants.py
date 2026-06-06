@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from app.core.dependencies import get_tenant_service
+from app.core.dependencies import get_bill_service, get_tenant_service
 from app.core.security import get_current_user
 from app.models.schemas.common import Page
 from app.models.schemas.tenant import Tenant, TenantCreate, TenantUpdate
+from app.services.bill_service import BillService
 from app.services.building_service import BuildingNotFoundError
 from app.services.tenant_service import TenantNotFoundError, TenantService
 
@@ -71,15 +72,26 @@ async def update_tenant(
     payload: TenantUpdate,
     user: str = Depends(get_current_user),
     service: TenantService = Depends(get_tenant_service),
+    bills: BillService = Depends(get_bill_service),
 ) -> Tenant:
     try:
-        return await service.update(
+        tenant = await service.update(
             owner=user, building_id=building_id, tenant_id=tenant_id, payload=payload
         )
     except BuildingNotFoundError:
         raise _building_404()
     except TenantNotFoundError:
         raise _tenant_404()
+    # If the rent changed, re-price the tenant's open (unpaid) rent bills so the
+    # Rent & Bills tab reflects it — independent of the frontend.
+    if "monthly_rent" in payload.model_dump(exclude_unset=True) and tenant.monthly_rent > 0:
+        await bills.sync_tenant_rent(
+            owner=user,
+            building_id=building_id,
+            tenant_id=tenant_id,
+            monthly_rent=tenant.monthly_rent,
+        )
+    return tenant
 
 
 @router.delete(
