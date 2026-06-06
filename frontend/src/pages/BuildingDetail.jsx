@@ -199,7 +199,7 @@ export default function BuildingDetail() {
             {[building.address, building.city].filter(Boolean).join(", ") || "No address set"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => setModal({ type: "contract" })}>
             <DocumentIcon className="h-4 w-4" /> Add from contract
           </Button>
