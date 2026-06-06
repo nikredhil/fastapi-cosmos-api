@@ -1,7 +1,8 @@
 """Aggregated KPIs for the landlord dashboard."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import calendar
+from datetime import date, datetime, timezone
 
 from app.services.bill_service import BillService
 from app.services.building_service import BuildingService
@@ -11,6 +12,21 @@ from app.services.unit_service import UnitService
 
 def _current_period() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def _add_months(iso_date: str | None, months: int) -> date | None:
+    """Return ``iso_date`` shifted forward by ``months`` (day clamped to month end)."""
+    if not iso_date:
+        return None
+    try:
+        start = date.fromisoformat(iso_date[:10])
+    except ValueError:
+        return None
+    total = start.month - 1 + months
+    year = start.year + total // 12
+    month = total % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 class DashboardService:
@@ -38,9 +54,12 @@ class DashboardService:
         overdue: list[dict] = []
         recent_payments: list[dict] = []
         per_building: list[dict] = []
+        rent_increases: list[dict] = []
+        today = datetime.now(timezone.utc).date()
 
         for b in buildings:
             units = await self._units.list(owner, b.id, limit=1000, offset=0)
+            unit_labels = {u.id: u.label for u in units}
             tenants = await self._tenants.list(owner, b.id, limit=1000, offset=0)
             bills = await self._bills.list(
                 owner, b.id, period=period, status=None, bill_type=None,
@@ -50,6 +69,33 @@ class DashboardService:
             total_units += len(units)
             occupied_units += sum(1 for u in units if u.status.value == "occupied")
             active_tenants += sum(1 for t in tenants if t.status.value == "active")
+
+            # Rent-increase reminders: each lease renews after `lease_months`,
+            # at which point the rent steps up by `rent_increase_pct`.
+            for t in tenants:
+                if t.status.value != "active" or not t.lease_months:
+                    continue
+                renewal = _add_months(t.move_in_date, t.lease_months)
+                if renewal is None:
+                    continue
+                pct = t.rent_increase_pct
+                new_rent = (
+                    round(t.monthly_rent * (1 + pct / 100)) if pct and t.monthly_rent else None
+                )
+                rent_increases.append(
+                    {
+                        "tenant_id": t.id,
+                        "building_id": b.id,
+                        "building_name": b.name,
+                        "tenant_name": t.name,
+                        "unit_label": unit_labels.get(t.unit_id),
+                        "current_rent": t.monthly_rent,
+                        "increase_pct": pct,
+                        "new_rent": new_rent,
+                        "renewal_date": renewal.isoformat(),
+                        "days_until": (renewal - today).days,
+                    }
+                )
 
             b_expected = sum(bill.amount for bill in bills)
             b_collected = sum(bill.paid_amount for bill in bills)
@@ -99,6 +145,7 @@ class DashboardService:
 
         recent_payments.sort(key=lambda p: p.get("paid_on") or "", reverse=True)
         overdue.sort(key=lambda o: o.get("due_date") or "")
+        rent_increases.sort(key=lambda r: r.get("renewal_date") or "")
         occupancy = round(occupied_units / total_units * 100) if total_units else 0
 
         return {
@@ -115,6 +162,7 @@ class DashboardService:
             "per_building": per_building,
             "overdue": overdue[:20],
             "recent_payments": recent_payments[:10],
+            "rent_increases": rent_increases[:20],
         }
 
 

@@ -4,9 +4,10 @@ import { Button, Modal, TextInput, NumberInput, TextArea, Select } from "./ui";
 import { DocumentIcon, CameraIcon } from "./icons";
 
 const EMPTY = {
-  tenant_name: "", tenant_phone: "", tenant_email: "", unit_label: "",
+  tenant_name: "", tenant_age: "", tenant_phone: "", tenant_email: "",
+  permanent_address: "", unit_label: "",
   monthly_rent: "", deposit: "", start_date: "", end_date: "", rent_due_day: 5,
-  terms_summary: "",
+  lease_months: "", rent_increase_pct: "", terms_summary: "",
 };
 
 // Two-step modal: (1) upload a contract photo to auto-parse, then
@@ -94,14 +95,18 @@ export default function ContractUpload({ building, units, onClose, onComplete })
       setImageId(res.contract_image_id);
       setForm({
         tenant_name: res.tenant_name || "",
+        tenant_age: res.tenant_age ?? "",
         tenant_phone: res.tenant_phone || "",
         tenant_email: res.tenant_email || "",
+        permanent_address: res.permanent_address || "",
         unit_label: res.unit_label || "",
         monthly_rent: res.monthly_rent ?? "",
         deposit: res.deposit ?? "",
         start_date: res.start_date || "",
         end_date: res.end_date || "",
         rent_due_day: res.rent_due_day ?? 5,
+        lease_months: res.lease_months ?? "",
+        rent_increase_pct: res.rent_increase_pct ?? "",
         terms_summary: res.terms_summary || "",
       });
       setNotice(
@@ -133,6 +138,9 @@ export default function ContractUpload({ building, units, onClose, onComplete })
     try {
       const rent = Number(form.monthly_rent) || 0;
       const deposit = Number(form.deposit) || 0;
+      const leaseMonths = Number(form.lease_months) || null;
+      const increasePct =
+        form.rent_increase_pct === "" ? null : Number(form.rent_increase_pct);
 
       // Match an existing unit by label, else create one.
       let unit = units.find(
@@ -147,11 +155,16 @@ export default function ContractUpload({ building, units, onClose, onComplete })
 
       const tenant = await api.createTenant(building.id, {
         name: form.tenant_name.trim(),
+        age: form.tenant_age === "" ? null : Number(form.tenant_age),
         phone: form.tenant_phone || null,
         email: form.tenant_email || null,
+        permanent_address: form.permanent_address || null,
         unit_id: unit?.id || null,
         deposit,
+        monthly_rent: rent,
         move_in_date: form.start_date || null,
+        lease_months: leaseMonths,
+        rent_increase_pct: increasePct,
       });
 
       await api.createLease(building.id, {
@@ -162,6 +175,8 @@ export default function ContractUpload({ building, units, onClose, onComplete })
         rent_due_day: Number(form.rent_due_day) || 5,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
+        lease_months: leaseMonths,
+        rent_increase_pct: increasePct,
         terms: form.terms_summary || null,
         contract_image_id: imageId,
         parsed: !!imageId,
@@ -240,17 +255,30 @@ export default function ContractUpload({ building, units, onClose, onComplete })
           <div className="grid gap-3 sm:grid-cols-2">
             <TextInput label="Tenant name" value={form.tenant_name}
               onChange={set("tenant_name")} autoFocus />
+            <NumberInput label="Age" min={0} max={120} value={form.tenant_age}
+              onChange={set("tenant_age")} />
             <TextInput label="Phone" value={form.tenant_phone} onChange={set("tenant_phone")} />
             <TextInput label="Email" value={form.tenant_email} onChange={set("tenant_email")} />
+            <div className="sm:col-span-2">
+              <TextInput label="Permanent address" value={form.permanent_address}
+                onChange={set("permanent_address")}
+                hint="Tenant's home address from the agreement" />
+            </div>
             <TextInput label="Unit / flat" value={form.unit_label} onChange={set("unit_label")}
               hint="Matched to an existing unit, or created" />
             <NumberInput label="Monthly rent (₹)" value={form.monthly_rent}
               onChange={set("monthly_rent")} />
-            <NumberInput label="Deposit (₹)" value={form.deposit} onChange={set("deposit")} />
-            <TextInput label="Start date" type="date" value={form.start_date}
+            <NumberInput label="Deposit / advance (₹)" value={form.deposit}
+              onChange={set("deposit")} />
+            <TextInput label="Move-in / start date" type="date" value={form.start_date}
               onChange={set("start_date")} />
             <TextInput label="End date" type="date" value={form.end_date}
               onChange={set("end_date")} />
+            <NumberInput label="Contract length (months)" min={1} max={600}
+              value={form.lease_months} onChange={set("lease_months")}
+              hint="Reminds you to raise rent on renewal" />
+            <NumberInput label="Rent increase on renewal (%)" min={0} max={100}
+              value={form.rent_increase_pct} onChange={set("rent_increase_pct")} />
             <NumberInput label="Rent due day" min={1} max={31} value={form.rent_due_day}
               onChange={set("rent_due_day")} />
           </div>

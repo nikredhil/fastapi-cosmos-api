@@ -18,11 +18,24 @@ CONTRACT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "tenant_name": {"type": ["string", "null"], "description": "Full name of the tenant"},
+        "tenant_age": {
+            "type": ["integer", "null"],
+            "description": "Tenant's age in years, e.g. 'Aged about 21 years' -> 21",
+        },
         "tenant_phone": {"type": ["string", "null"], "description": "Tenant phone number"},
         "tenant_email": {"type": ["string", "null"], "description": "Tenant email, if present"},
+        "permanent_address": {
+            "type": ["string", "null"],
+            "description": (
+                "The tenant's PERMANENT/home address (not the rented premises). Often labelled "
+                "'Permanent Address'. Return the full address as a single line."
+            ),
+        },
         "unit_label": {
             "type": ["string", "null"],
-            "description": "Flat/unit identifier, e.g. 'A-101' or 'Flat 3B'",
+            "description": (
+                "Flat/unit identifier of the RENTED premises, e.g. 'Flat 503', 'A-101' or '102'"
+            ),
         },
         "monthly_rent": {
             "type": ["integer", "null"],
@@ -30,10 +43,20 @@ CONTRACT_SCHEMA: dict[str, Any] = {
         },
         "deposit": {
             "type": ["integer", "null"],
-            "description": "Security deposit in INR (rupees), as an integer",
+            "description": "Security deposit / advance in INR (rupees), as an integer",
         },
         "start_date": {"type": ["string", "null"], "description": "Lease start date, ISO YYYY-MM-DD"},
         "end_date": {"type": ["string", "null"], "description": "Lease end date, ISO YYYY-MM-DD"},
+        "lease_months": {
+            "type": ["integer", "null"],
+            "description": "Contract length / duration in months, e.g. '11 (ELEVEN) MONTHS' -> 11",
+        },
+        "rent_increase_pct": {
+            "type": ["number", "null"],
+            "description": (
+                "Percentage the rent increases on renewal, e.g. 'an increase of 5% in rent' -> 5"
+            ),
+        },
         "rent_due_day": {
             "type": ["integer", "null"],
             "description": "Day of the month rent is due (1-31)",
@@ -52,8 +75,11 @@ _PROMPT = (
     "You are reading a scanned/photographed residential rental agreement from India. "
     "Extract the fields and call the record_contract tool exactly once. "
     "Convert any rent/deposit amounts to plain integers in INR (drop ₹, commas, and the word "
-    "'rupees'). Use ISO dates (YYYY-MM-DD). If a field is not clearly stated, set it to null — "
-    "do not guess."
+    "'rupees'). Use ISO dates (YYYY-MM-DD). For lease_months give the duration in months as an "
+    "integer (e.g. '11 (ELEVEN) MONTHS' -> 11). For rent_increase_pct give the renewal increase "
+    "as a number (e.g. 'an increase of 5% in rent' -> 5). permanent_address is the tenant's own "
+    "permanent/home address, NOT the rented premises. If a field is not clearly stated, set it to "
+    "null — do not guess."
 )
 
 
@@ -69,6 +95,17 @@ def _coerce_int(value: Any) -> int | None:
         return value
     try:
         return int(str(value).replace(",", "").strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _coerce_num(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).replace(",", "").replace("%", "").strip())
     except (ValueError, TypeError):
         return None
 
@@ -137,6 +174,9 @@ def parse_contract_image(
     result["monthly_rent"] = _coerce_int(result.get("monthly_rent"))
     result["deposit"] = _coerce_int(result.get("deposit"))
     result["rent_due_day"] = _coerce_int(result.get("rent_due_day"))
+    result["tenant_age"] = _coerce_int(result.get("tenant_age"))
+    result["lease_months"] = _coerce_int(result.get("lease_months"))
+    result["rent_increase_pct"] = _coerce_num(result.get("rent_increase_pct"))
     result["parsed"] = True
     result["error"] = None
     return result

@@ -39,6 +39,8 @@ class LeaseService:
             "monthly_rent": payload.monthly_rent,
             "deposit": payload.deposit,
             "rent_due_day": payload.rent_due_day,
+            "lease_months": payload.lease_months,
+            "rent_increase_pct": payload.rent_increase_pct,
             "terms": payload.terms,
             "contract_image_id": payload.contract_image_id,
             "parsed": payload.parsed,

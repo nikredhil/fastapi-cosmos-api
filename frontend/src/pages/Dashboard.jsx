@@ -301,6 +301,58 @@ export default function Dashboard() {
               )}
             </SectionCard>
           </div>
+
+          {/* Rent-increase reminders */}
+          <div className="mt-6">
+            <SectionCard title="Upcoming rent increases">
+              {!data.rent_increases || data.rent_increases.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-400">
+                  No scheduled rent increases. Add a contract length and increase % to a tenant.
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {data.rent_increases.map((r) => {
+                    const due = r.days_until <= 0;
+                    const soon = r.days_until > 0 && r.days_until <= 60;
+                    const accent = due
+                      ? "bg-rose-100 text-rose-500"
+                      : soon
+                      ? "bg-amber-100 text-amber-600"
+                      : "bg-slate-100 text-slate-400";
+                    const when = due
+                      ? `due now (${r.renewal_date})`
+                      : `in ${r.days_until} days · ${r.renewal_date}`;
+                    return (
+                      <li key={r.tenant_id}
+                        className="flex items-center justify-between rounded-xl px-2 py-2 text-sm transition hover:bg-slate-50">
+                        <div className="flex items-center gap-3">
+                          <span className={`flex h-9 w-9 items-center justify-center rounded-full ${accent}`}>
+                            <ClockIcon className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <p className="font-medium text-slate-700">{r.tenant_name || "—"}</p>
+                            <p className="text-xs text-slate-400">
+                              {r.building_name}{r.unit_label ? ` · ${r.unit_label}` : ""}
+                              {r.increase_pct != null ? ` · +${r.increase_pct}%` : ""} · {when}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-right">
+                          {r.new_rent != null ? (
+                            <span className="font-semibold text-slate-700">
+                              {rupees(r.current_rent)} → {rupees(r.new_rent)}
+                            </span>
+                          ) : (
+                            <span className="font-semibold text-slate-500">{rupees(r.current_rent)}</span>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </SectionCard>
+          </div>
         </>
       )}
     </div>
