@@ -41,6 +41,7 @@ from app.db.repositories.user_repository import UserRepository
 from app.services.bill_service import BillService
 from app.services.building_service import BuildingService
 from app.services.dashboard_service import DashboardService
+from app.services.image_store import build_image_store
 from app.services.lease_service import LeaseService
 from app.services.tenant_service import TenantService
 from app.services.unit_service import UnitService
@@ -122,9 +123,11 @@ async def lifespan(app: FastAPI):
     app.state.bill_service = bill_service
     app.state.dashboard_service = dashboard_service
     app.state.user_service = user_service
+    app.state.image_store = build_image_store(settings)
 
     yield
 
+    await app.state.image_store.close()
     connection = getattr(app.state, "cosmos_connection", None)
     if connection is not None:
         await connection.close()

@@ -42,3 +42,8 @@ def get_bill_service(request: Request) -> BillService:
 
 def get_dashboard_service(request: Request) -> DashboardService:
     return request.app.state.dashboard_service
+
+
+def get_image_store(request: Request):
+    """The configured image backend (Azure Blob or local disk)."""
+    return request.app.state.image_store

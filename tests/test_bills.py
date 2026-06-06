@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-PERIOD = "2026-06"
+# A far-future month so generated bills' due dates are always ahead of "today"
+# (keeps the unpaid/partial assertions stable regardless of when tests run).
+PERIOD = "2099-12"
 
 
 async def _building_with_lease(client, headers, rent=20000):

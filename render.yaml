@@ -31,7 +31,13 @@ services:
         sync: false
       - key: COSMOS_KEY
         sync: false
-      # Uploaded images still use the (ephemeral) local disk on the free plan.
+      # Uploaded images (contract/Aadhaar photos) persist in Azure Blob Storage.
+      # The connection string is a secret — set it in the Render dashboard.
+      - key: AZURE_STORAGE_CONNECTION_STRING
+        sync: false
+      - key: BLOB_CONTAINER
+        value: uploads
+      # Local-disk fallback (used only if the connection string above is unset).
       - key: DATA_DIR
         value: ./data
       - key: UPLOADS_DIR

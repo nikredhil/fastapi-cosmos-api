@@ -26,8 +26,14 @@ class Settings(BaseSettings):
     # Directory for the JSON-file backend (only used when db_backend == "file").
     data_dir: str = "./data"
 
-    # Where uploaded contract images are stored (served back via the contracts API).
+    # Where uploaded contract images are stored on disk (used unless Azure Blob
+    # Storage is configured below). Served back via the contracts API.
     uploads_dir: str = "./data/uploads"
+
+    # Azure Blob Storage for uploaded images. When the connection string is set,
+    # images persist in Blob Storage instead of the (ephemeral) local disk.
+    azure_storage_connection_string: str | None = None
+    blob_container: str = "uploads"
 
     # Anthropic (Claude) — used to parse uploaded contract photos into structured
     # fields. When unset, the contract-parse endpoint degrades to manual entry.
