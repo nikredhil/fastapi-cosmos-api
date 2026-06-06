@@ -47,6 +47,15 @@ async function bootstrap() {
   });
   await pca.initialize();
 
+  // Consume a returning Microsoft redirect (#code=…) and complete sign-in.
+  // Required by MSAL; without it the code is left unprocessed in the URL.
+  try {
+    const result = await pca.handleRedirectPromise();
+    if (result?.account) pca.setActiveAccount(result.account);
+  } catch (err) {
+    console.error("Microsoft redirect handling failed", err);
+  }
+
   const accounts = pca.getAllAccounts();
   if (accounts.length > 0) pca.setActiveAccount(accounts[0]);
 

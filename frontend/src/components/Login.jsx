@@ -56,10 +56,11 @@ export default function Login({ onLocalAuthed }) {
     setBusy(true);
     setError(null);
     try {
-      await instance.loginPopup({ scopes: LOGIN_SCOPES });
+      // Full-page redirect — more reliable than a popup behind Vercel's
+      // cross-origin headers. The returning #code is handled on next load.
+      await instance.loginRedirect({ scopes: LOGIN_SCOPES });
     } catch (err) {
-      if (err?.errorCode !== "user_cancelled") setError("Microsoft sign-in failed. Please try again.");
-    } finally {
+      setError("Microsoft sign-in failed. Please try again.");
       setBusy(false);
     }
   }
