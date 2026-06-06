@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import Settings, get_settings
 from app.core.dependencies import get_user_service
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_current_user
 from app.models.schemas.user import AuthToken, LoginRequest, RegisterRequest
 from app.services.user_service import (
     EmailTakenError,
@@ -30,6 +30,16 @@ async def register(
         )
     token = create_access_token(subject=user.email, settings=settings)
     return AuthToken(access_token=token, display_name=user.display_name)
+
+
+@router.get("/me")
+async def me(user: str = Depends(get_current_user)) -> dict:
+    """Return the stable user id the API derives from your bearer token.
+
+    Local accounts look like ``local:<email>``; Microsoft accounts are the
+    Entra object id (a GUID). Used to discover the id to migrate data to.
+    """
+    return {"user_id": user, "source": "local" if user.startswith("local:") else "microsoft"}
 
 
 @router.post("/login", response_model=AuthToken)
