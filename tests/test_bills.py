@@ -83,6 +83,71 @@ async def test_payment_marks_paid(client, auth_headers) -> None:
 
 
 @pytest.mark.asyncio
+async def test_generate_bills_tenant_without_lease(client, auth_headers) -> None:
+    # A manually added tenant (rent set, no lease) must still be billed.
+    bid = (
+        await client.post("/buildings", json={"name": "Manual"}, headers=auth_headers)
+    ).json()["id"]
+    unit = (
+        await client.post(
+            f"/buildings/{bid}/units",
+            json={"label": "5", "default_rent": 12000},
+            headers=auth_headers,
+        )
+    ).json()
+    await client.post(
+        f"/buildings/{bid}/tenants",
+        json={"name": "Riya", "unit_id": unit["id"], "monthly_rent": 12000},
+        headers=auth_headers,
+    )
+
+    items = (
+        await client.post(
+            f"/buildings/{bid}/bills/generate", json={"period": PERIOD}, headers=auth_headers
+        )
+    ).json()["items"]
+    assert len(items) == 1
+    assert items[0]["bill_type"] == "rent"
+    assert items[0]["amount"] == 12000
+    assert items[0]["tenant_name"] == "Riya"
+    assert items[0]["unit_label"] == "5"
+
+
+@pytest.mark.asyncio
+async def test_generate_bills_no_duplicate_with_two_leases(client, auth_headers) -> None:
+    # Two active leases for one tenant must not produce two rent bills.
+    bid = (await client.post("/buildings", json={"name": "Dup"}, headers=auth_headers)).json()["id"]
+    unit = (
+        await client.post(
+            f"/buildings/{bid}/units",
+            json={"label": "9", "default_rent": 18000},
+            headers=auth_headers,
+        )
+    ).json()
+    tenant = (
+        await client.post(
+            f"/buildings/{bid}/tenants",
+            json={"name": "Sam", "unit_id": unit["id"], "monthly_rent": 18000},
+            headers=auth_headers,
+        )
+    ).json()
+    for _ in range(2):
+        await client.post(
+            f"/buildings/{bid}/leases",
+            json={"unit_id": unit["id"], "tenant_id": tenant["id"], "monthly_rent": 18000},
+            headers=auth_headers,
+        )
+
+    items = (
+        await client.post(
+            f"/buildings/{bid}/bills/generate", json={"period": PERIOD}, headers=auth_headers
+        )
+    ).json()["items"]
+    rent_bills = [b for b in items if b["bill_type"] == "rent"]
+    assert len(rent_bills) == 1
+
+
+@pytest.mark.asyncio
 async def test_overdue_status_for_past_due_date(client, auth_headers) -> None:
     bid = (await client.post("/buildings", json={"name": "Old"}, headers=auth_headers)).json()["id"]
     bill = (

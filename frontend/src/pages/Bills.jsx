@@ -11,6 +11,13 @@ import {
   BillTypeIcon, CashIcon, GearIcon, WaterIcon, BoltIcon, WrenchIcon,
 } from "../components/icons";
 
+// Sort key from a unit/flat label: leading digits ascending, blanks last.
+function flatSortKey(label) {
+  if (!label) return Number.POSITIVE_INFINITY;
+  const n = parseInt(String(label).replace(/[^0-9]/g, ""), 10);
+  return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n;
+}
+
 function GenerateModal({ buildingId, period, onClose, onDone }) {
   const [form, setForm] = useState({
     include_water: false, water_amount: 0,
@@ -53,7 +60,7 @@ function GenerateModal({ buildingId, period, onClose, onDone }) {
       ) : (
         <form onSubmit={submit} className="space-y-4">
           <p className="text-sm text-slate-500">
-            Creates a rent bill for every active lease. Optionally add flat utility charges
+            Creates a rent bill for every active tenant. Optionally add flat utility charges
             applied to each tenant.
           </p>
           {[
@@ -281,6 +288,14 @@ export default function Bills() {
       const items = await api.listBills(buildingId, {
         period, status: statusFilter || undefined, bill_type: typeFilter || undefined,
       });
+      // Ascending by flat number (blanks last), then tenant name, then type.
+      items.sort((a, b) => {
+        const d = flatSortKey(a.unit_label) - flatSortKey(b.unit_label);
+        if (d !== 0) return d;
+        const t = (a.tenant_name || "").localeCompare(b.tenant_name || "");
+        if (t !== 0) return t;
+        return a.bill_type.localeCompare(b.bill_type);
+      });
       setBills(items);
       setError(null);
     } catch (e) {
@@ -371,7 +386,7 @@ export default function Bills() {
       ) : bills.length === 0 ? (
         <EmptyState icon={<CashIcon className="mx-auto h-8 w-8 text-slate-400" />} title={`No bills for ${formatPeriod(period)}`}
           action={<Button onClick={() => setModal("generate")}>Generate bills</Button>}>
-          Generate this month's rent and utility bills for all active leases.
+          Generate this month's rent and utility bills for all active tenants.
         </EmptyState>
       ) : (
         <Card className="overflow-hidden">

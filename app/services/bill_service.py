@@ -308,9 +308,15 @@ class BillService:
     async def generate_monthly(
         self, owner: str, building_id: str, payload: GenerateBillsRequest
     ) -> list[Bill]:
-        """Create rent (+ optional utility) bills for every active lease in a month.
+        """Create rent (+ optional utility) bills for every active tenant in a month.
 
-        Idempotent per (lease, type, period): a bill that already exists for the
+        Tenant-centric: one rent bill per active tenant, using the tenant's
+        effective rent (their own ``monthly_rent``, falling back to their active
+        lease's amount) and the lease's due day/unit when present. This means
+        manually added tenants without a lease are billed too, tenants are never
+        double-billed, and leases left behind by deleted tenants are ignored.
+
+        Idempotent per (tenant, type, period): a bill that already exists for the
         same tenant/type/period is skipped so re-running doesn't duplicate.
         """
         await self._assert_building(owner, building_id)
@@ -330,29 +336,36 @@ class BillService:
         if payload.include_maintenance and payload.maintenance_amount > 0:
             extras.append(("maintenance", payload.maintenance_amount))
 
-        created: list[Bill] = []
+        # First active lease per tenant — supplies the due day, unit, and a rent
+        # fallback when the tenant has no explicit monthly_rent set.
         leases = await self._leases.list(owner, building_id, limit=1000, offset=0)
-        # The landlord can override the contract rent per tenant; bills follow
-        # that effective rent, falling back to the lease's original amount.
-        tenants = await self._tenants.list(owner, building_id, limit=1000, offset=0)
-        rent_override = {t.id: t.monthly_rent for t in tenants if t.monthly_rent}
+        lease_by_tenant: dict[str, object] = {}
         for lease in leases:
-            if lease.status.value != "active":
+            if lease.status.value == "active":
+                lease_by_tenant.setdefault(lease.tenant_id, lease)
+
+        created: list[Bill] = []
+        tenants = await self._tenants.list(owner, building_id, limit=1000, offset=0)
+        for tenant in tenants:
+            if tenant.status.value != "active":
                 continue
-            due = _due_date_for(payload.period, lease.rent_due_day)
-            rent = rent_override.get(lease.tenant_id) or lease.monthly_rent
+            lease = lease_by_tenant.get(tenant.id)
+            rent = tenant.monthly_rent or (lease.monthly_rent if lease else 0)
+            due_day = lease.rent_due_day if lease else 5
+            unit_id = tenant.unit_id or (lease.unit_id if lease else None)
+            due = _due_date_for(payload.period, due_day)
             charges: list[tuple[str, int, str | None]] = [("rent", rent, due)]
             for bill_type, amount in extras:
                 charges.append((bill_type, amount, due))
             for bill_type, amount, due_date in charges:
-                if amount <= 0 or already(lease.tenant_id, bill_type):
+                if amount <= 0 or already(tenant.id, bill_type):
                     continue
                 bill = await self.create(
                     owner,
                     building_id,
                     BillCreate(
-                        unit_id=lease.unit_id,
-                        tenant_id=lease.tenant_id,
+                        unit_id=unit_id,
+                        tenant_id=tenant.id,
                         bill_type=bill_type,  # type: ignore[arg-type]
                         period=payload.period,
                         amount=amount,
