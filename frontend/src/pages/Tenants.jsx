@@ -16,7 +16,15 @@ function unitSortKey(label) {
 
 function AddTenantModal({ buildings, onClose, onDone }) {
   const [form, setForm] = useState({
-    building_id: buildings[0]?.id || "", name: "", phone: "", email: "", unit_id: "", deposit: "",
+    building_id: buildings[0]?.id || "",
+    name: "",
+    phone: "",
+    emergency_phone: "",
+    email: "",
+    unit_id: "",
+    move_in_date: "",
+    deposit: "",
+    monthly_rent: "",
   });
   const [units, setUnits] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -36,9 +44,12 @@ function AddTenantModal({ buildings, onClose, onDone }) {
       await api.createTenant(form.building_id, {
         name: form.name.trim(),
         phone: form.phone || null,
+        emergency_phone: form.emergency_phone || null,
         email: form.email || null,
         unit_id: form.unit_id || null,
+        move_in_date: form.move_in_date || null,
         deposit: Number(form.deposit) || 0,
+        monthly_rent: Number(form.monthly_rent) || 0,
       });
       onDone();
       onClose();
@@ -58,13 +69,22 @@ function AddTenantModal({ buildings, onClose, onDone }) {
         <TextInput label="Name" value={form.name} onChange={set("name")} autoFocus />
         <div className="grid grid-cols-2 gap-3">
           <TextInput label="Phone" value={form.phone} onChange={set("phone")} />
-          <TextInput label="Email" value={form.email} onChange={set("email")} />
+          <TextInput label="Emergency phone" value={form.emergency_phone}
+            onChange={set("emergency_phone")} />
         </div>
+        <TextInput label="Email" value={form.email} onChange={set("email")} />
         <Select label="Unit" value={form.unit_id} onChange={set("unit_id")}>
           <option value="">— Unassigned —</option>
           {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
         </Select>
-        <NumberInput label="Deposit (₹)" value={form.deposit} onChange={set("deposit")} />
+        <TextInput label="Move-in date" type="date" value={form.move_in_date}
+          onChange={set("move_in_date")}
+          hint="Anchors the 11-month / 5% renewal reminder on the dashboard" />
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Deposit (₹)" value={form.deposit} onChange={set("deposit")} />
+          <NumberInput label="Monthly rent (₹)" value={form.monthly_rent}
+            onChange={set("monthly_rent")} />
+        </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
