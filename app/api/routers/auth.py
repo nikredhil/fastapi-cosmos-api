@@ -1,10 +1,11 @@
 """Local account auth: register and login (email + password)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core.config import Settings, get_settings
 from app.core.dependencies import get_user_service
+from app.core.rate_limit import enforce_login_limit
 from app.core.security import create_access_token, get_current_user
 from app.models.schemas.user import AuthToken, LoginRequest, RegisterRequest
 from app.services.user_service import (
@@ -18,10 +19,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=AuthToken, status_code=status.HTTP_201_CREATED)
 async def register(
+    request: Request,
     payload: RegisterRequest,
     settings: Settings = Depends(get_settings),
     service: UserService = Depends(get_user_service),
 ) -> AuthToken:
+    enforce_login_limit(request, payload.email)
     try:
         user = await service.register(payload)
     except EmailTakenError:
@@ -44,10 +47,12 @@ async def me(user: str = Depends(get_current_user)) -> dict:
 
 @router.post("/login", response_model=AuthToken)
 async def login(
+    request: Request,
     payload: LoginRequest,
     settings: Settings = Depends(get_settings),
     service: UserService = Depends(get_user_service),
 ) -> AuthToken:
+    enforce_login_limit(request, payload.email)
     try:
         user = await service.authenticate(payload)
     except InvalidCredentialsError:

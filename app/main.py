@@ -21,6 +21,7 @@ from app.api.routers import (
 )
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.rate_limit import SlidingWindowLimiter
 from app.db.repositories import (
     bill_repository,
     building_repository,
@@ -112,7 +113,7 @@ async def lifespan(app: FastAPI):
         unit_service,
     )
     dashboard_service = DashboardService(
-        building_service, unit_service, tenant_service, bill_service
+        building_service, unit_service, tenant_service, bill_service, lease_service
     )
     user_service = UserService(UserRepository(backends["users"]))
 
@@ -124,6 +125,9 @@ async def lifespan(app: FastAPI):
     app.state.dashboard_service = dashboard_service
     app.state.user_service = user_service
     app.state.image_store = build_image_store(settings)
+    app.state.login_limiter = SlidingWindowLimiter(
+        settings.login_rate_limit_attempts, settings.login_rate_limit_window_seconds
+    )
 
     yield
 

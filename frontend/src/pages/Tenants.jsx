@@ -83,6 +83,7 @@ function EditTenantModal({ row, onClose, onDone }) {
     emergency_phone: tenant.emergency_phone || "",
     email: tenant.email || "",
     unit_id: tenant.unit_id || "",
+    move_in_date: tenant.move_in_date || "",
     deposit: tenant.deposit ?? "",
     monthly_rent: tenant.monthly_rent ?? "",
     status: tenant.status || "active",
@@ -109,6 +110,7 @@ function EditTenantModal({ row, onClose, onDone }) {
         emergency_phone: form.emergency_phone || null,
         email: form.email || null,
         unit_id: form.unit_id || null,
+        move_in_date: form.move_in_date || null,
         deposit: Number(form.deposit) || 0,
         monthly_rent: rent,
         status: form.status,
@@ -152,6 +154,9 @@ function EditTenantModal({ row, onClose, onDone }) {
           <option value="">— Unassigned —</option>
           {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
         </Select>
+        <TextInput label="Move-in date" type="date" value={form.move_in_date}
+          onChange={set("move_in_date")}
+          hint="Anchors the 11-month / 5% renewal reminder on the dashboard" />
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Deposit (₹)" value={form.deposit} onChange={set("deposit")} />
           <NumberInput label="Monthly rent (₹)" value={form.monthly_rent}

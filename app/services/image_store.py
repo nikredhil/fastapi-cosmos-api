@@ -45,6 +45,16 @@ class DiskImageStore:
         media = MEDIA_FOR.get(os.path.splitext(path)[1], "application/octet-stream")
         return data, media
 
+    async def delete(self, image_id: str) -> bool:
+        """Remove the file(s) for ``image_id``. Returns True if anything existed."""
+        matches = glob.glob(os.path.join(self._dir, f"{image_id}.*"))
+        for path in matches:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        return bool(matches)
+
     async def close(self) -> None:  # symmetry with BlobImageStore
         return None
 
@@ -91,6 +101,16 @@ class BlobImageStore:
             return data, media
         except ResourceNotFoundError:
             return None
+
+    async def delete(self, image_id: str) -> bool:
+        from azure.core.exceptions import ResourceNotFoundError
+
+        container = await self._container()
+        try:
+            await container.delete_blob(image_id)
+            return True
+        except ResourceNotFoundError:
+            return False
 
     async def close(self) -> None:
         await self._service.close()

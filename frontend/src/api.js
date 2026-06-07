@@ -115,6 +115,8 @@ export const api = {
   // --- contracts / documents ---
   parseContract: (bid, files) => uploadFiles(`/buildings/${bid}/contracts/parse`, files),
   uploadImage: (bid, file) => upload(`/buildings/${bid}/contracts/upload`, file),
+  deleteImage: (bid, imageId) =>
+    request(`/buildings/${bid}/contracts/${imageId}`, { method: "DELETE" }),
   contractImageUrl: (bid, imageId) => `${BASE}/buildings/${bid}/contracts/${imageId}`,
 
   // --- chat ---

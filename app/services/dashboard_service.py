@@ -6,12 +6,13 @@ from datetime import date, datetime, timezone
 
 from app.services.bill_service import BillService
 from app.services.building_service import BuildingService
+from app.services.lease_service import LeaseService
 from app.services.tenant_service import TenantService
 from app.services.unit_service import UnitService
 
 
-# Portfolio-wide lease terms: every lease renews after 11 months with a 5%
-# rent increase, unless a tenant has explicit values of their own.
+# Portfolio-wide lease terms: every lease renews after exactly 11 months with a
+# fixed 5% rent increase, applied uniformly to every active tenant.
 DEFAULT_LEASE_MONTHS = 11
 DEFAULT_INCREASE_PCT = 5.0
 
@@ -42,11 +43,13 @@ class DashboardService:
         unit_service: UnitService,
         tenant_service: TenantService,
         bill_service: BillService,
+        lease_service: LeaseService,
     ) -> None:
         self._buildings = building_service
         self._units = unit_service
         self._tenants = tenant_service
         self._bills = bill_service
+        self._leases = lease_service
 
     async def summary(self, owner: str, period: str | None = None) -> dict:
         period = period or _current_period()
@@ -67,6 +70,16 @@ class DashboardService:
             units = await self._units.list(owner, b.id, limit=1000, offset=0)
             unit_labels = {u.id: u.label for u in units}
             tenants = await self._tenants.list(owner, b.id, limit=1000, offset=0)
+            leases = await self._leases.list(owner, b.id, limit=2000, offset=0)
+            # Earliest known lease start per tenant — used as a fallback anchor
+            # when the tenant has no manually entered move-in date.
+            lease_start: dict[str, str] = {}
+            for lz in leases:
+                if not lz.start_date:
+                    continue
+                current = lease_start.get(lz.tenant_id)
+                if current is None or lz.start_date < current:
+                    lease_start[lz.tenant_id] = lz.start_date
             bills = await self._bills.list(
                 owner, b.id, period=period, status=None, bill_type=None,
                 tenant_id=None, limit=2000, offset=0,
@@ -76,20 +89,18 @@ class DashboardService:
             occupied_units += sum(1 for u in units if u.status.value == "occupied")
             active_tenants += sum(1 for t in tenants if t.status.value == "active")
 
-            # Rent-increase reminders: every lease renews after 11 months with a
-            # 5% increase by default (per-tenant overrides honored). Anchored on
-            # the tenant's move-in date.
+            # Rent-increase reminders: every lease renews after a fixed 11 months
+            # with a fixed 5% increase for every tenant. Anchored on the tenant's
+            # manually entered move-in date, falling back to the lease start date.
             for t in tenants:
                 if t.status.value != "active":
                     continue
-                months = t.lease_months or DEFAULT_LEASE_MONTHS
-                renewal = _add_months(t.move_in_date, months)
+                anchor = t.move_in_date or lease_start.get(t.id)
+                renewal = _add_months(anchor, DEFAULT_LEASE_MONTHS)
                 if renewal is None:
                     continue
-                pct = t.rent_increase_pct if t.rent_increase_pct is not None else DEFAULT_INCREASE_PCT
-                new_rent = (
-                    round(t.monthly_rent * (1 + pct / 100)) if pct and t.monthly_rent else None
-                )
+                pct = DEFAULT_INCREASE_PCT
+                new_rent = round(t.monthly_rent * (1 + pct / 100)) if t.monthly_rent else None
                 rent_increases.append(
                     {
                         "tenant_id": t.id,

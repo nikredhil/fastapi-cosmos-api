@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
 
+    # Brute-force protection for /auth/login and /auth/register. Each client IP +
+    # email gets at most this many attempts per rolling window before a 429.
+    login_rate_limit_attempts: int = 10
+    login_rate_limit_window_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

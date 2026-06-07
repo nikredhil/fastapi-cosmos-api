@@ -116,3 +116,24 @@ async def get_contract_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
     data, media_type = found
     return Response(content=data, media_type=media_type)
+
+
+@router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contract_image(
+    building_id: str,
+    image_id: str,
+    user: str = Depends(get_current_user),
+    buildings: BuildingService = Depends(get_building_service),
+    store=Depends(get_image_store),
+) -> Response:
+    """Delete a stored image (a contract page or Aadhaar page).
+
+    Only removes the blob/file. The caller is responsible for dropping the id
+    from the lease's ``contract_image_ids`` / tenant's ``aadhaar_image_ids``.
+    """
+    await _assert_building(buildings, user, building_id)
+    # image_id is a uuid hex we generated; guard against traversal/odd keys.
+    if not image_id.isalnum():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+    await store.delete(image_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

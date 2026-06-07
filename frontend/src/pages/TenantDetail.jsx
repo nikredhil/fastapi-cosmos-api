@@ -122,6 +122,43 @@ export default function TenantDetail() {
     }
   }
 
+  async function deleteContractPage(leaseId, imgId) {
+    if (!window.confirm("Delete this contract page? This can't be undone.")) return;
+    setUploading(true);
+    try {
+      const lease = leases.find((l) => l.id === leaseId);
+      const remaining = (lease ? leasePages(lease) : []).filter((id) => id !== imgId);
+      await api.updateLease(buildingId, leaseId, {
+        contract_image_ids: remaining,
+        contract_image_id: remaining[0] || null,
+      });
+      await api.deleteImage(buildingId, imgId);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteAadhaarPage(imgId) {
+    if (!window.confirm("Delete this Aadhaar page? This can't be undone.")) return;
+    setUploading(true);
+    try {
+      const remaining = aadhaarPages(tenant).filter((id) => id !== imgId);
+      await api.updateTenant(buildingId, tenantId, {
+        aadhaar_image_ids: remaining,
+        aadhaar_image_id: remaining[0] || null,
+      });
+      await api.deleteImage(buildingId, imgId);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading) return <Spinner />;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!tenant) return null;
@@ -240,23 +277,31 @@ export default function TenantDetail() {
                         </p>
                         <div className="mt-1 grid grid-cols-3 gap-2">
                           {leasePages(l).map((imgId, i) => (
-                            <button key={imgId}
-                              onClick={() => setLightbox({
-                                url: api.contractImageUrl(buildingId, imgId),
-                                alt: `Lease page ${i + 1}`,
-                              })}
-                              title={`Page ${i + 1} — click to expand`}
-                              className="group relative block overflow-hidden rounded-lg border border-slate-200"
-                            >
-                              <AuthImage
-                                url={api.contractImageUrl(buildingId, imgId)}
-                                alt={`page ${i + 1}`}
-                                className="h-24 w-full object-cover transition group-hover:scale-105"
-                              />
-                              <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
-                                {i + 1}
-                              </span>
-                            </button>
+                            <div key={imgId} className="group relative">
+                              <button
+                                onClick={() => setLightbox({
+                                  url: api.contractImageUrl(buildingId, imgId),
+                                  alt: `Lease page ${i + 1}`,
+                                })}
+                                title={`Page ${i + 1} — click to expand`}
+                                className="block w-full overflow-hidden rounded-lg border border-slate-200"
+                              >
+                                <AuthImage
+                                  url={api.contractImageUrl(buildingId, imgId)}
+                                  alt={`page ${i + 1}`}
+                                  className="h-24 w-full object-cover transition group-hover:scale-105"
+                                />
+                                <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
+                                  {i + 1}
+                                </span>
+                              </button>
+                              <button type="button" disabled={uploading}
+                                onClick={() => deleteContractPage(l.id, imgId)}
+                                title="Delete page"
+                                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white shadow hover:bg-rose-600 disabled:opacity-50">
+                                ✕
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </>
@@ -296,23 +341,31 @@ export default function TenantDetail() {
                   </p>
                   <div className="grid grid-cols-3 gap-2">
                     {aadhaarPages(tenant).map((imgId, i) => (
-                      <button key={imgId}
-                        onClick={() => setLightbox({
-                          url: api.contractImageUrl(buildingId, imgId),
-                          alt: `Aadhaar page ${i + 1}`,
-                        })}
-                        title={`Page ${i + 1} — click to expand`}
-                        className="group relative block overflow-hidden rounded-lg border border-slate-200"
-                      >
-                        <AuthImage
-                          url={api.contractImageUrl(buildingId, imgId)}
-                          alt={`Aadhaar page ${i + 1}`}
-                          className="h-24 w-full object-cover transition group-hover:scale-105"
-                        />
-                        <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
-                          {i + 1}
-                        </span>
-                      </button>
+                      <div key={imgId} className="group relative">
+                        <button
+                          onClick={() => setLightbox({
+                            url: api.contractImageUrl(buildingId, imgId),
+                            alt: `Aadhaar page ${i + 1}`,
+                          })}
+                          title={`Page ${i + 1} — click to expand`}
+                          className="block w-full overflow-hidden rounded-lg border border-slate-200"
+                        >
+                          <AuthImage
+                            url={api.contractImageUrl(buildingId, imgId)}
+                            alt={`Aadhaar page ${i + 1}`}
+                            className="h-24 w-full object-cover transition group-hover:scale-105"
+                          />
+                          <span className="absolute left-1 top-1 rounded bg-slate-900/70 px-1 text-[10px] font-semibold text-white">
+                            {i + 1}
+                          </span>
+                        </button>
+                        <button type="button" disabled={uploading}
+                          onClick={() => deleteAadhaarPage(imgId)}
+                          title="Delete page"
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-xs text-white shadow hover:bg-rose-600 disabled:opacity-50">
+                          ✕
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </>
