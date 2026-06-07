@@ -99,11 +99,11 @@ async def lifespan(app: FastAPI):
 
     building_service = BuildingService(BuildingRepository(backends["buildings"]))
     unit_service = UnitService(UnitRepository(backends["units"]), building_service)
-    tenant_service = TenantService(
-        TenantRepository(backends["tenants"]), building_service, unit_service
-    )
     lease_service = LeaseService(
         LeaseRepository(backends["leases"]), building_service, unit_service
+    )
+    tenant_service = TenantService(
+        TenantRepository(backends["tenants"]), building_service, unit_service, lease_service
     )
     bill_service = BillService(
         BillRepository(backends["bills"]),

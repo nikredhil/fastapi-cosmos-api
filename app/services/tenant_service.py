@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.db.repositories.tenant_repository import TenantRepository
 from app.models.schemas.tenant import Tenant, TenantCreate, TenantUpdate
 from app.services.building_service import BuildingNotFoundError, BuildingService
+from app.services.lease_service import LeaseService
 from app.services.unit_service import UnitService
 
 # Trust-forward blue/teal palette, cycled when no avatar color is supplied.
@@ -23,11 +24,12 @@ class TenantNotFoundError(Exception):
 class TenantService:
     def __init__(
         self, repository: TenantRepository, building_service: BuildingService,
-        unit_service: UnitService,
+        unit_service: UnitService, lease_service: LeaseService,
     ) -> None:
         self._repo = repository
         self._buildings = building_service
         self._units = unit_service
+        self._leases = lease_service
 
     async def _assert_building(self, owner: str, building_id: str) -> None:
         await self._buildings.get(owner, building_id)
@@ -98,6 +100,8 @@ class TenantService:
         deleted = await self._repo.delete(tenant_id, building_id)
         if not deleted:
             raise TenantNotFoundError(tenant_id)
+        # Remove the tenant's leases so no orphan contracts/bills linger.
+        await self._leases.delete_for_tenant(owner, building_id, tenant_id)
         if doc and doc.get("unit_id"):
             await self._units.set_status(owner, building_id, doc["unit_id"], "vacant")
 

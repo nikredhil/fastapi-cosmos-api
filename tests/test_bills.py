@@ -148,6 +148,23 @@ async def test_generate_bills_no_duplicate_with_two_leases(client, auth_headers)
 
 
 @pytest.mark.asyncio
+async def test_deleting_tenant_removes_their_leases(client, auth_headers) -> None:
+    bid = await _building_with_lease(client, auth_headers)
+    # The helper created one tenant with one lease.
+    tenants = (await client.get(f"/buildings/{bid}/tenants", headers=auth_headers)).json()["items"]
+    leases = (await client.get(f"/buildings/{bid}/leases", headers=auth_headers)).json()["items"]
+    assert len(leases) == 1
+    tenant_id = tenants[0]["id"]
+
+    deleted = await client.delete(f"/buildings/{bid}/tenants/{tenant_id}", headers=auth_headers)
+    assert deleted.status_code == 204
+
+    # The tenant's lease is gone too — no orphan left behind.
+    after = (await client.get(f"/buildings/{bid}/leases", headers=auth_headers)).json()["items"]
+    assert after == []
+
+
+@pytest.mark.asyncio
 async def test_overdue_status_for_past_due_date(client, auth_headers) -> None:
     bid = (await client.post("/buildings", json={"name": "Old"}, headers=auth_headers)).json()["id"]
     bill = (

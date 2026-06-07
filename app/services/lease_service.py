@@ -86,5 +86,22 @@ class LeaseService:
         if not deleted:
             raise LeaseNotFoundError(lease_id)
 
+    async def delete_for_tenant(self, owner: str, building_id: str, tenant_id: str) -> int:
+        """Delete every lease belonging to a tenant (used when the tenant is removed).
+
+        Returns the number of leases deleted. Prevents leases — and the bills the
+        old lease-based generator produced from them — from being left orphaned
+        when their tenant is deleted.
+        """
+        await self._assert_building(owner, building_id)
+        docs = await self._repo.list_for_building(building_id, limit=2000, offset=0)
+        removed = 0
+        for doc in docs:
+            if doc.get("tenant_id") == tenant_id and await self._repo.delete(
+                doc["id"], building_id
+            ):
+                removed += 1
+        return removed
+
 
 __all__ = ["LeaseService", "LeaseNotFoundError"]
